@@ -16,3 +16,5 @@ References:
 This library and set of utilities are designed for both protocols. Ultimately, a Home Assistant integration will be created, but main goal for this repository is to have encoder/decoder of both protocols working with CLI inputs and connected to MQTT broker. 
 
 MQTT broker configuration is not part of this project.
+
+Currently, I only have CO2 sensor (HEX protocol) and Air Monitor Lite (JSON protocol), so coverage may be limited.
