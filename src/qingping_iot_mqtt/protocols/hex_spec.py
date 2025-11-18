@@ -129,15 +129,49 @@ class HexKey(IntEnum):
   """`Product ID`
   
   SPEC: 2 bytes, in addition to the user-defined product ID, which must be same as the BLE product ID."""
-  PROP_CO2_CALIBRATION_ONGOING = (0x4A, HexFieldFormats.BOOL)
-  """`CO2 calibration status` - is it ongoing now?
-  
-  SPEC: 1 byte. 1: being calibrated, 0: not being.
-  """
   PROP_PM_SN =                   (0x61, HexFieldFormats.LV_STRING)
   """SPEC: PM module serial number
   
   SPEC: When the length is 0, it means that the PM module is not connected."""
+  PROP_SNTP_CALIBRATION = (0x44, HexFieldFormats.BOOL) # this is RW prop
+  """`Set the SNTP calibration time switch`
+  
+  SPEC:0: off; 1: on. """
+  PROP_SNTP_SERVER = (0x43, HexFieldFormats.LV_STRING) # this is RW prop
+  """`Set the SNTP server`
+  
+  SPEC: Such as: cn.pool.ntp.org ."""
+  
+  # device status fields
+  STATE_CO2_CALIBRATION_ONGOING = (0x4A, HexFieldFormats.BOOL)
+  """`CO2 calibration status` - is it ongoing now?
+  
+  SPEC: 1 byte. 1: being calibrated, 0: not being.
+  """
+  STATE_USB_PLUGGEDIN = (0x2C, HexFieldFormats.BOOL)
+  """`USB plug-in status`
+  
+  SPEC: Plug-in: 0x01; Pull-out: 0x00"""
+  STATE_BATTERY_PERC = (0x64, HexFieldFormats.PERC)
+  """`Battery percentage` - %
+  
+  SPEC: 1 byte unsigned."""
+  STATE_SIGNAL_STRENGHT = (0x65, HexFieldFormats.GENERIC_2B)
+  """`Signal strength` - dBm???
+  
+  SPEC: 2 bytes unsigned.
+  OBSERVATION: for WiFi it's signed dBm RSSI (so SPEC is wrong)"""
+  
+  STATE_ALL_DATA_SENT = (0x1D, HexFieldFormats.BOOL)
+  """`Disconnect the device` - flag signalling all data has been sent
+  
+  SPEC: When the data reported or sent by the device is the last piece of content, this KEY can be used to allow the device to enter the low power consumption mode quickly.
+  SPEC: - 0x00: There is still data not sent.
+  SPEC: - 0x01: All the data has been sent."""
+  STATE_NEXT_UPLOAD_TS = (0x24, HexFieldFormats.TIMESTAMP)
+  """`Time of next connection`
+  
+  SPEC: The content is timestamp."""
   
   # section headers
   HEADER_HISTORICAL_DATA_6B = (0x03, HexFieldFormats.LV_ENTRIES_6B)
@@ -360,17 +394,6 @@ class HexKey(IntEnum):
   
   SPEC: Over-limit event."""
   
-  # connection flags
-  CONNECTION_DISCONNECT_ALL_SENT = (0x1D, HexFieldFormats.BOOL) # TODO: maybe it should be PROP?
-  """`Disconnect the device` - flag signalling all data has been sent
-  
-  SPEC: When the data reported or sent by the device is the last piece of content, this KEY can be used to allow the device to enter the low power consumption mode quickly.
-  SPEC: - 0x00: There is still data not sent.
-  SPEC: - 0x01: All the data has been sent."""
-  CONNECTION_NEXT_TS = (0x24, HexFieldFormats.TIMESTAMP)
-  """`Time of next connection`
-  
-  SPEC: The content is timestamp."""
   
   # commands
   CMD_FACTORY_RESET = (0x1E, HexFieldFormats.UNKNOWN) # TODO: confirm format
@@ -405,20 +428,8 @@ class HexKey(IntEnum):
   """`Manual calibration of CO2`
   
   SPEC: 1 byte. 1: perform calibration."""
-  CMD_SNTP_SERVER = (0x43, HexFieldFormats.LV_STRING) # TODO: confirm format
-  """`Set the SNTP server`
-  
-  SPEC: Such as: cn.pool.ntp.org ."""
-  CMD_SNTP_CALIBRATION = (0x44, HexFieldFormats.BOOL)
-  """`Set the SNTP calibration time switch`
-  
-  SPEC:0: off; 1: on. """
   
   # sensor data fields
-  DATA_USB_PLUGGEDIN = (0x2C, HexFieldFormats.BOOL)
-  """`USB plug-in status`
-  
-  SPEC: Plug-in: 0x01; Pull-out: 0x00"""
   DATA_PRESSURE_HISTORICAL = (0x2D, HexFieldFormats.PRESSURE_PRECISE)
   """`Historical data reporting (air pressure 0.01 pa)`
   
@@ -443,15 +454,6 @@ class HexKey(IntEnum):
   """`AUX temperature and humidity data`
   
   SPEC: 2 bytes temperature (positive offset 500) + 2 bytes humidity."""
-  DATA_BATTERY_PERC = (0x64, HexFieldFormats.PERC)
-  """`Battery percentage` - %
-  
-  SPEC: 1 byte unsigned."""
-  DATA_SIGNAL_STRENGHT = (0x65, HexFieldFormats.GENERIC_2B)
-  """`Signal strength` - dBm???
-  
-  SPEC: 2 bytes unsigned.
-  OBSERVATION: for WiFi it's signed dBm RSSI (so SPEC is wrong)"""
   
   # unknown
   UNKNOWN_TIMESTAMP = (0x15, HexFieldFormats.UNKNOWN)

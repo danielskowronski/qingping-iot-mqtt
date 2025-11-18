@@ -5,9 +5,9 @@
 from __future__ import annotations
 
 from dataclasses import dataclass, field
-from typing import Iterable, Optional, Protocol as TypingProtocol
+from typing import Iterable, Optional, Protocol as TypingProtocol, Mapping, Any
 from enum import Enum, IntEnum, auto
-from datetime import datetime
+from datetime import datetime, timedelta, time
 
 class SensorReadingType(Enum):
   REALTIME = auto()
@@ -41,6 +41,7 @@ class SensorType(Enum):
   TVOC = auto()
   RADON = auto()
   SIGNAL_STRENGTH = auto()
+  # FIXME: implement field to indicate whether ranges are supported
 
 class SensorReadingStatus(IntEnum):
   NORMAL = 0
@@ -64,7 +65,7 @@ class SensorReadingsContext:
   This is useful for readings that share common timestamp and origin, especially payloads that merge multiple readings.
   """
   origin: SensorReadingType
-  timestamp: int
+  timestamp: int # FIXME: use datetime?
   readings: Iterable[SensorReading]
   status: SensorReadingStatus # TODO: verify this is for alerts
   level: Optional[int] = None
@@ -79,6 +80,253 @@ class SensorReadingsContext:
     for reading in self.readings:
       msg += f"\n    - {reading}"
     return msg
+
+@dataclass(frozen=True)
+class DeviceInfoWiFi:
+  ssid: str
+  """WiFi SSID"""
+  bssid: str
+  """WiFi BSSID (MAC Address)"""
+  channel: int
+  """WiFi AP channel"""
+  signal_strength: int
+  """WiFi Signal strength (RSSI) - dBm"""
+
+@dataclass(frozen=True)
+class TemporaryRapidReporting:
+  """Container for temporary rapid reporting settings."""
+  enabled: bool
+  """Whether temporary rapid reporting is enabled."""
+  interval: Optional[timedelta] = None
+  """Interval between rapid reports."""
+  duration: Optional[timedelta] = None
+  """Total duration of rapid reporting."""
+
+@dataclass(frozen=False)
+class DeviceStatus:
+  """Container for device status information, as self-reported by proprties.
+  
+  Non-frozen to allow multi-stage data ingestion.
+  """
+  
+  co2_calibration_ongoing: Optional[bool] = None
+  """Is CO2 sensor calibration ongoing?"""
+  charger_plugged_in: Optional[bool] = None
+  """Is charger/USB power plugged in?"""
+  battery_percentage: Optional[int] = None
+  """Battery charge level - percentage."""
+  signal_strength: Optional[int] = None
+  """Generic signal strength (RSSI) - dBm."""
+  wifi_info: Optional[DeviceInfoWiFi] = None
+  """WiFi-specific device information, if applicable."""
+  
+  all_data_sent: Optional[bool] = None
+  """Whether device has sent all recorded historical data to server. Reported before disconnection."""
+  next_upload_time: Optional[datetime] = None
+  
+  ntp_enabled: Optional[bool] = None
+  """Whether NTP time synchronization is enabled on device."""
+  ntp_server: Optional[str] = None
+  """NTP server address configured on device."""
+  
+  ble_info: Optional[DeviceInfoBLE] = None
+  """BLE-specific device information, if applicable."""
+  temporary_rapid_reporting: Optional[TemporaryRapidReporting] = None
+  """Temporary rapid reporting settings."""
+  
+  bound_device_list: Iterable[str] = field(default_factory=list)
+  """List of bound devices (e.g. for gateways)."""
+
+class TimeFormat(Enum):
+  """Time format used on device display."""
+  H24 = auto()
+  H12 = auto()
+class TemperatureUnit(Enum):
+  """Temperature unit used on device display."""
+  CELSIUS = auto()
+  FAHRENHEIT = auto()
+class SensorDisplayRangedColor(Enum):
+  """Colors used for sensor value ranges on device display (traffic lights)."""
+  GREEN = auto()
+  YELLOW = auto()
+  RED = auto()
+  UNDEFINED = auto()
+@dataclass(frozen=True)
+class SensorDisplayRange:
+  """Container for ranges of sensor values for display purposes. Traffic-lights on devices.
+  
+  By design, this is sensor-type agnostic and forced to float values, since this is only supported format.
+  """
+  # FIXME: Decimal?
+  def color(self, value: float) -> SensorDisplayRangedColor:
+    """Get color for given sensor value."""
+    return SensorDisplayRangedColor.UNDEFINED
+@dataclass(frozen=False)
+class SensorOffsetConfiguration:
+  """Container for sensor offset configuration.
+  
+  By design, this is sensor-type agnostic and forced to float values, since this is only supported format.
+  """
+  # FIXME: Decimal?
+  offset_value: float
+  offset_permille: int
+
+@dataclass(frozen=True)
+class EncryptionSettings:
+  """Container for encryption settings."""
+  
+  enabled: bool
+  """Whether encryption is enabled."""
+  key: Optional[bytes] = None
+  """Encryption key, if applicable."""
+
+@dataclass(frozen=False)
+class DeviceSettings:
+  """Container for device settings information.
+  
+  Either self-reported by device, or requested by server. 
+  
+  All fields are Optional to only set what user wants to change.
+  
+  Non-frozen to allow multi-stage data ingestion.
+  """
+  
+  record_interval: Optional[timedelta] = None
+  """How often device should record sensor readings.
+  
+  Those are later uploaded every upload_interval (more than 1 if record_interval < upload_interval)."""
+  record_co2_interval: Optional[timedelta] = None
+  """How often device should record CO2 sensor readings."""
+  record_pm_interval: Optional[timedelta] = None
+  """How often device should record PM sensor readings."""
+  upload_interval: Optional[timedelta] = None
+  """How often device should connect to network and upload recorded sensor readings.
+  
+  Every upload_interval device will upload real-time data + hostorical data if needed."""
+  alert_repeat_interval: Optional[timedelta] = None
+  """How often device should repeat alert notifications when sensor readings are outside configured thresholds."""
+  alert_delay_interval: Optional[timedelta] = None
+  """How long device should wait before sending alert notification when sensor readings are outside configured thresholds."""
+
+  ranges: Mapping[SensorType, SensorDisplayRange] = field(default_factory=dict)
+  """Mapping of sensor types to display ranges for traffic-light representation on device display."""
+  offsets: Mapping[SensorType, SensorOffsetConfiguration] = field(default_factory=dict)
+  """Mapping of sensor types to offset configurations."""
+  
+  auto_poweroff_delay: Optional[timedelta] = None
+  """Duration after which device goes to sleep when on battery power."""
+  
+  device_display_time_format: Optional[TimeFormat] = None
+  """Time format used on device display."""
+  device_display_temperature_unit: Optional[TemperatureUnit] = None
+  """Temperature unit used on device display."""
+  
+  device_display_show_tvoc: Optional[bool] = None
+  """Whether device display should show TVOC readings."""
+  device_display_use_led: Optional[bool] = None
+  """Whether device display should use LED indicators."""
+  device_nighttime_start: Optional[time] = None
+  """Start of nighttime period on device (for dimming display)."""
+  device_nighttime_end: Optional[time] = None
+  """End of nighttime period on device (for dimming display)."""
+  device_screensaver_timeout: Optional[timedelta] = None
+  """Duration of inactivity after which device display goes to screensaver mode."""
+  device_screensaver_type: Optional[int] = None
+  """Type of screensaver used on device display."""
+  
+  auto_co2_calibration: Optional[bool] = None
+  """Whether device should perform automatic CO2 sensor calibration."""
+  
+  encryption: Optional[EncryptionSettings] = None
+  """Encryption settings."""
+  
+  nbiot_splicing_command: Optional[bytes] = None
+  """NB-IoT splicing command data."""
+  nbiot_protocol_byte_replacement: Optional[bytes] = None
+  """NB-IoT protocol byte replacement data."""
+  
+  connection_timeout: Optional[timedelta] = None
+  """Network connection timeout duration."""
+
+@dataclass(frozen=False)
+class DeviceCommand:
+  """Container for device command information."""
+  command: Any
+  parameters: Mapping = field(default_factory=dict)
+
+@dataclass(frozen=True)
+class MQTTConfiguration:
+  """Container for MQTT configuration payload."""
+  broker_address: str
+  """MQTT Broker address."""
+  broker_port: int
+  """MQTT Broker port."""
+  username: str
+  """MQTT Username."""
+  password: str
+  """MQTT Password."""
+  client_id: str
+  """MQTT Client ID."""
+  subscribe_topic: str
+  """MQTT Topic for device to subscribe to (for commands)."""
+  publish_topic: str
+  """MQTT Topic for device to publish to (for responses and data upload)."""
+@dataclass(frozen=True)
+class WiFiConfiguration:
+  """Container for WiFi configuration payload."""
+  ssid: str
+  """WiFi SSID."""
+  password: str
+  """WiFi Password."""
+
+@dataclass(frozen=True)
+class DeviceInfoBLE:
+  mac: Optional[str] = None
+  """BLE MAC Address"""
+  buffer: Optional[str] = None
+  """BLE data content"""
+  srv_uuid: Optional[str] = None
+  """BLE Service UUID"""
+  chr_uuid: Optional[str] = None
+  """BLE Feature UUID"""
+  adv_data: Optional[str] = None
+  """BLE broadcast data"""
+
+@dataclass(frozen=False)
+class DeviceInfo:
+  """Container for semi-permanent device information, as self-reported by proprties.
+  
+  Non-frozen to allow multi-stage data ingestion.
+  """
+
+  user_id: Optional[str] = None
+  """User-assigned device ID."""
+  
+  sn: Optional[str] = None
+  """Unique, permamanent serial number of the device."""
+  product_id: Optional[int] = None
+  """Product identifier."""
+  hw_revision: Optional[int] = None
+  """Hardware revision."""
+  pm_sn: Optional[str] = None
+  """Permanent PM module serial number."""
+  
+  fw_version_general: Optional[str] = None
+  """Unified firmware version string."""
+  fw_version_wifi: Optional[str] = None
+  """WiFi module firmware version string."""
+  fw_version_mcu: Optional[str] = None
+  """MCU firmware version string."""
+  
+  sim_number: Optional[str] = None
+  """SIM card number (for cellular devices)."""
+  
+  unknown_properties: Mapping = field(default_factory=dict)
+  """Container for unknown/unparsed properties, for future analysis.
+  
+  Protocol dependent implementation and presentation, but should be human-readable.
+  """
+  
 
 class ProtocolMessage:
   """Abstract representation of message using Protocol."""
@@ -136,10 +384,7 @@ class SensorReadingsContainer():
 class SettingsContainer():
   """Container for settings messages (read and writes), independent of protocol."""
   # TODO: implement this
-@dataclass(frozen=True)
-class CommandContainer():
-  """Container for command messages (including reprovision), independent of protocol."""
-  # TODO: implement this
+
 
 class Protocol(TypingProtocol):
   """Abstract transport contract shared by JSON/HEX variants. This can be understood as Layer 4 in OSI model."""
