@@ -17,6 +17,7 @@ from enum import Enum, IntEnum, auto
 from datetime import datetime, timezone
 
 from .base import (
+  ProtocolName,
   Protocol,
   ProtocolMessage,
   ProtocolMessageDirection,
@@ -198,7 +199,7 @@ class HexProtocolMesssage(ProtocolMessage):
     else:
       raise HexFrameError(f"Unknown HEX command in frame: {self.frame.cmd:02X}")
   def dump(self) -> str:
-    msg = super().dump()
+    msg = f"HexProtocolMessage(direction={self.direction.name}, category={self.category.name}, raw_cmd={self.frame.cmd:2X}, body_len={len(self.body)} bytes>"
     for entry in self.frame.payload.entries:
       msg += f"\n  - {entry.dump()}"
     return msg
@@ -416,9 +417,12 @@ class HexRawCommand(DeviceCommand):
     msg = f"HexRawCommand(command=0x{self.command:02X}, payload_length={len(self.payload)})"
     msg += f"\n  {self.payload.hex()}"
     return msg
+class HexCommandRequestSettings(HexRawCommand):
+  def __init__(self):
+    super().__init__(command=HexCommand.CONFIGURATION_SENDING, parameters={})
 
 class HexProtocol(Protocol):#
-  name = "hex"
+  name = ProtocolName.HEX.name
   version = "1.0"
 
   def decode_message(self, message: bytes, direction: ProtocolMessageDirection) -> ProtocolMessage:

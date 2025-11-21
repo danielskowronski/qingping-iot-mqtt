@@ -4,39 +4,132 @@
 import click
 
 from qingping_iot_mqtt.__about__ import __version__
-from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection
-from qingping_iot_mqtt.protocols.hex import HexProtocol, ProtocolMessageCategory, HexSensorReadingMessage
+from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection, ProtocolMessageCategory
+from qingping_iot_mqtt.protocols.hex import HexProtocol, HexFrame, HexSensorReadingMessage, HexProtocolMesssage
+from qingping_iot_mqtt.config.schema import CliConfig
+from qingping_iot_mqtt.config.load import load_cli_config
+from qingping_iot_mqtt.cli.mqtt import run_mqtt_loop
+
+import coloredlogs, logging
+logger = logging.getLogger(__name__)
+
+
+def _parse_hex_string(label: str, value: str, *, allow_empty: bool = False) -> bytes:
+  cleaned = "".join(ch for ch in value if not ch.isspace())
+  if not cleaned:
+    if allow_empty:
+      return b""
+    raise click.BadParameter(f"{label} cannot be empty.")
+  if len(cleaned) % 2 != 0:
+    raise click.BadParameter(f"{label} must have an even number of hex digits.")
+  try:
+    return bytes.fromhex(cleaned)
+  except ValueError as exc:
+    raise click.BadParameter(f"Invalid {label}: {exc}") from exc
+
+
+def _resolve_direction(requested, default):
+  return requested or default
+
+
+def _ensure_hex_proto(proto: str):
+  if proto in {"hex", "auto"}:
+    return
+  raise click.ClickException(f"Protocol '{proto}' is not supported yet.")
+
+
+def _decode_hex_payload(raw: bytes, direction: ProtocolMessageDirection):
+  if raw.startswith(b'{'):
+    click.echo("Detected JSON protocol frame. Use appropriate tool to decode JSON frames.")
+    return
+  protocol = HexProtocol()
+  message = protocol.decode_message(raw, direction)
+  if hasattr(message, "dump"):
+    click.echo(message.dump())
+  else:
+    click.echo(f"Command: 0x{message.frame.cmd:02X} ({message.category.name})")
+  if message.category == ProtocolMessageCategory.READINGS:
+    click.echo(HexSensorReadingMessage(message).dump())
 
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
+@click.option("--cfg", default="~/.config/qingping/qingping-mqtt.yaml", type=click.Path(dir_okay=False), help="Path to configuration file.", show_default=True)
+@click.option("--verbosity", "-v", count=True, help="Increase output verbosity (can be used multiple times).")
 @click.version_option(version=__version__, prog_name="qingping-iot-mqtt")
-def qingping_iot_mqtt():
-  pass
+@click.pass_context
+def qingping_iot_mqtt(ctx: click.Context, cfg: str, verbosity: int) -> None:
+  """Qingping IoT MQTT utilities."""
+  ctx.ensure_object(dict)
+  ctx.obj["cfg"] = cfg
+  if ctx.invoked_subcommand is None:
+    click.echo(ctx.get_help())
+  
+  lvl = logging.INFO
+  if verbosity := ctx.params.get("verbosity", 0):
+    if verbosity == 1:
+      lvl=logging.DEBUG
+  coloredlogs.install(fmt="[%(asctime)s] %(message)s", level=lvl)
+  logging.info(f"Qingping IoT MQTT CLI v{__version__}")
 
+
+@qingping_iot_mqtt.command("subscribe")
+@click.option("--log-db", type=click.Path(dir_okay=False, writable=True), help="Path to SQLite database to log sensor readings.")
+@click.pass_context
+def subscribe(ctx: click.Context, log_db: str):
+  """Subscribe to Qingping IoT MQTT broker and process live messages."""
+  cfg_path = ctx.obj["cfg"]
+  cfg=load_cli_config(cfg_path)
+  run_mqtt_loop(cfg)
+  
 
 @qingping_iot_mqtt.group("manual")
-def manual_group():
+@click.option("--proto", type=click.Choice(["auto", "hex", "json"]), default="auto", show_default=True, help="Protocol to use.")
+@click.option("--to-device", is_flag=True, default=False, help="Treat payload as message to device.")
+@click.option("--from-device", is_flag=True, default=False, help="Treat payload as message from device.")
+@click.pass_context
+def manual_group(ctx: click.Context, proto: str, to_device: bool, from_device: bool):
   """Manual protocol helpers."""
+  if to_device and from_device:
+    raise click.BadParameter("Choose only one of --to-device/--from-device.")
+  direction = None
+  if to_device:
+    direction = ProtocolMessageDirection.SERVER_TO_DEVICE
+  elif from_device:
+    direction = ProtocolMessageDirection.DEVICE_TO_SERVER
+  ctx.ensure_object(dict)
+  ctx.obj["manual"] = {"proto": proto, "direction": direction}
 
 
-@manual_group.command("hex")
-@click.option("--incoming", "incoming_hex", required=True, help="Raw HEX frame as hex string (spaces allowed).")
-def manual_hex(incoming_hex: str):
-  """Decode HEX protocol message assuming it was sent by a device."""
-  cleaned = "".join(ch for ch in incoming_hex if not ch.isspace())
-  if len(cleaned) % 2 != 0:
-    raise click.BadParameter("HEX payload must consist of full bytes (even number of hex digits).")
-  try:
-    raw = bytes.fromhex(cleaned)
-  except ValueError as exc:
-    raise click.BadParameter(f"Invalid HEX payload: {exc}") from exc
+@manual_group.command("decode")
+@click.option("--payload", "payload_hex", required=True, help="Raw frame as hex string (spaces allowed).")
+@click.pass_context
+def manual_decode(ctx: click.Context, payload_hex: str):
+  """Decode payload coming from a protocol frame."""
+  settings = ctx.obj.get("manual", {})
+  proto = settings.get("proto", "auto")
+  direction = _resolve_direction(settings.get("direction"), ProtocolMessageDirection.DEVICE_TO_SERVER)
+  _ensure_hex_proto(proto)
+  raw = _parse_hex_string("payload", payload_hex)
+  click.echo(f"Protocol: HEX")
+  click.echo(f"Direction: {direction.name}")
+  _decode_hex_payload(raw, direction)
 
-  if raw[0:2] == b'\x7b\x0a':
-    click.echo("Detected JSON protocol frame. Use appropriate tool to decode JSON frames.")
-    return
 
-  protocol = HexProtocol()
-  message = protocol.decode_message(raw, ProtocolMessageDirection.DEVICE_TO_SERVER)
-  click.echo(message.dump())
-  if message.category== ProtocolMessageCategory.READINGS:
-    click.echo(HexSensorReadingMessage(message).dump())
+@manual_group.command("encode")
+@click.option("--raw-cmd", "raw_cmd_hex", required=True, help="HEX command byte (e.g. 31).")
+@click.option("--payload", "payload_hex", default="", help="Payload as hex string (spaces allowed).")
+@click.pass_context
+def manual_encode(ctx: click.Context, raw_cmd_hex: str, payload_hex: str):
+  """Encode payload into protocol frame."""
+  settings = ctx.obj.get("manual", {})
+  proto = settings.get("proto", "auto")
+  direction = _resolve_direction(settings.get("direction"), ProtocolMessageDirection.SERVER_TO_DEVICE)
+  _ensure_hex_proto(proto)
+  cmd_bytes = _parse_hex_string("raw-cmd", raw_cmd_hex)
+  if len(cmd_bytes) != 1:
+    raise click.BadParameter("raw-cmd must describe exactly one byte.")
+  payload_bytes = _parse_hex_string("payload", payload_hex, allow_empty=True)
+  frame = HexFrame.construct_frame(cmd_bytes[0], payload_bytes)
+  click.echo(f"Protocol: HEX")
+  click.echo(f"Direction: {direction.name}")
+  click.echo(f"Frame: {frame.frame.hex()}")

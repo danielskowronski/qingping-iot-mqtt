@@ -6,8 +6,21 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Protocol as TypingProtocol, Mapping, Any
-from enum import Enum, IntEnum, auto
+from enum import Enum, StrEnum, IntEnum, auto
 from datetime import datetime, timedelta, time
+
+class ProtocolName(StrEnum):
+  HEX = "hex"
+  JSON = "json"
+  UNKNOWN = "unknown"
+  @classmethod
+  def identify(cls, data: bytes) -> ProtocolName:
+    """Identify ProtocolName from payload, based on magic ID."""
+    if data.startswith(b'\x43\x47'):
+      return ProtocolName.HEX
+    if data.startswith(b'{') and data.endswith(b'}'):
+      return ProtocolName.JSON
+    return ProtocolName.UNKNOWN
 
 class SensorReadingType(Enum):
   REALTIME = auto()
@@ -151,6 +164,28 @@ class SensorDisplayRangedColor(Enum):
   YELLOW = auto()
   RED = auto()
   UNDEFINED = auto()
+class SensorEventTriggerConditionType(Enum):
+  ABOVE = auto()
+  BELOW = auto()
+class SensorEventTriggerRepeat(Enum):
+  ONCE = auto()
+  DAILY = auto()
+@dataclass()
+class SensorEventTriggerCondition():
+  sensor: SensorType
+  """Sensor type for which the event trigger condition is defined."""
+  condition_type: SensorEventTriggerConditionType
+  """Type of condition to trigger the event - above or below limit."""
+  threshold_value: int # FIXME: use Decimal?
+  """Threshold value for triggering the event."""
+  monitoring_start_time: Optional[time] = None
+  """Start of daily window when monitoring is active."""
+  monitoring_end_time: Optional[time] = None
+  """End of daily window when monitoring is active."""
+  monitoring_repeat: Optional[SensorEventTriggerRepeat] = None
+  """Whether the event trigger condition is one-time or daily repeated."""
+  
+
 @dataclass(frozen=True)
 class SensorDisplayRange:
   """Container for ranges of sensor values for display purposes. Traffic-lights on devices.
@@ -212,6 +247,8 @@ class DeviceSettings:
   """Mapping of sensor types to display ranges for traffic-light representation on device display."""
   offsets: Mapping[SensorType, SensorOffsetConfiguration] = field(default_factory=dict)
   """Mapping of sensor types to offset configurations."""
+  event_triggers: Iterable[SensorEventTriggerCondition] = field(default_factory=list)
+  """List of sensor event trigger conditions. It seems like multiple conditions can be set per sensor."""
   
   auto_poweroff_delay: Optional[timedelta] = None
   """Duration after which device goes to sleep when on battery power."""
