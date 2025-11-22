@@ -12,7 +12,8 @@
 from enum import Enum, IntEnum, auto
 
 from .base import (
-  ProtocolMessageDirection
+  ProtocolMessageDirection,
+  SensorType
 )
 class HexFieldFormats(Enum):
   """Types of field formats to be parsed in HEX protocol.
@@ -152,11 +153,11 @@ class HexKey(IntEnum):
   """`USB plug-in status`
   
   SPEC: Plug-in: 0x01; Pull-out: 0x00"""
-  STATE_BATTERY_PERC = (0x64, HexFieldFormats.PERC)
+  STATE_BATTERY_PERC = (0x64, HexFieldFormats.PERC, SensorType.BATTERY)
   """`Battery percentage` - %
   
   SPEC: 1 byte unsigned."""
-  STATE_SIGNAL_STRENGHT = (0x65, HexFieldFormats.GENERIC_2B)
+  STATE_SIGNAL_STRENGHT = (0x65, HexFieldFormats.GENERIC_2B, SensorType.SIGNAL_STRENGTH)
   """`Signal strength` - dBm???
   
   SPEC: 2 bytes unsigned.
@@ -210,35 +211,35 @@ class HexKey(IntEnum):
   """`Reporting delay time` in seconds
   
   SPEC: 2 bytes, unit is seconds."""
-  SETTING_CO2_RANGES = (0x3C, HexFieldFormats.RANGE)
+  SETTING_CO2_RANGES = (0x3C, HexFieldFormats.RANGE, SensorType.CO2)
   """`Set the middle range of CO2 level` - ppm
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value (inclusive) and the second point is the maximum value (inclusive)."""
-  SETTING_TEMPERATURE_RANGES = (0x4F, HexFieldFormats.RANGE)
+  SETTING_TEMPERATURE_RANGES = (0x4F, HexFieldFormats.RANGE, SensorType.TEMPERATURE)
   """`Set the middle range of temperature level` - deci-degree Celsius
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the middle grade, and the second point is the maximum value of the middle grade, with a step of 0.1."""
-  SETTING_HUMIDITY_RANGES = (0x50, HexFieldFormats.RANGE)
+  SETTING_HUMIDITY_RANGES = (0x50, HexFieldFormats.RANGE, SensorType.HUMIDITY)
   """`Set the middle range of humidity rating standard` - permille
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 0.1."""
-  SETTING_PM25_RANGES = (0x51, HexFieldFormats.RANGE)
+  SETTING_PM25_RANGES = (0x51, HexFieldFormats.RANGE, SensorType.PM25)
   """`Set the middle range of PM2.5 rating standard` - ppm
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 1."""
-  SETTING_PM10_RANGES = (0x52, HexFieldFormats.RANGE)
+  SETTING_PM10_RANGES = (0x52, HexFieldFormats.RANGE, SensorType.PM10)
   """`Set the middle range of PM10 rating standard` - ppm
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 1."""
-  SETTING_TVOC_RANGES = (0x53, HexFieldFormats.RANGE)
+  SETTING_TVOC_RANGES = (0x53, HexFieldFormats.RANGE, SensorType.TVOC)
   """`Set the middle range of TVOC rating standard` - (?)
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 1."""
-  SETTING_NOISE_RANGES = (0x54, HexFieldFormats.RANGE)
+  SETTING_NOISE_RANGES = (0x54, HexFieldFormats.RANGE, SensorType.NOISE)
   """`Set the middle range of Noise rating standard` - (dB?)
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 1."""
-  SETTING_LIGHT_RANGES = (0x55, HexFieldFormats.RANGE)
+  SETTING_LIGHT_RANGES = (0x55, HexFieldFormats.RANGE, SensorType.LIGHT)
   """`Set the middle range of Light rating standard` - (lux?)
   
   SPEC: 4 bytes, every 2 bytes occupy a demarcation point, the first point is the minimum value of the medium level, the second point is the maximum value of the medium level (inclusive), step 1."""
@@ -266,43 +267,43 @@ class HexKey(IntEnum):
   """`CO2 ASC switch` - enable or disable automatic self-calibration (ASC) of CO2 sensor
   
   SPEC: 1 byte. 0: off; 1: on."""
-  SETTING_CO2_OFFSET_PMIL = (0x3F, HexFieldFormats.PERMILLE)
+  SETTING_CO2_OFFSET_PMIL = (0x3F, HexFieldFormats.PERMILLE, SensorType.CO2)
   """`Offset CO2 by percentage` - permille
   
   SPEC: 2 bytes, percentage, step is 0.1%."""
-  SETTING_CO2_OFFSET_PPM = (0x45, HexFieldFormats.PPM)
+  SETTING_CO2_OFFSET_PPM = (0x45, HexFieldFormats.PPM, SensorType.CO2)
   """`Offset CO2 by value` - ppm
   
   SPEC: 2 bytes, value, step is 1."""
-  SETTING_TEMPERATURE_OFFSET_VALUE_DC = (0x46, HexFieldFormats.DECI_DEGREE)
+  SETTING_TEMPERATURE_OFFSET_VALUE_DC = (0x46, HexFieldFormats.DECI_DEGREE, SensorType.TEMPERATURE)
   """`Offset temperature by value` - deci-degree Celsius
   
   SPEC: 2 bytes, value, step is 0.1."""
-  SETTING_TEMPERATURE_OFFSET_PMIL = (0x47, HexFieldFormats.PERMILLE)
+  SETTING_TEMPERATURE_OFFSET_PMIL = (0x47, HexFieldFormats.PERMILLE, SensorType.TEMPERATURE)
   """`Offset temperature by percentage` - permille
   
   SPEC: 2 bytes, percentage, step is 0.1%."""
-  SETTING_HUMIDITY_OFFSET_VALUE_PMIL = (0x48, HexFieldFormats.PERMILLE)
+  SETTING_HUMIDITY_OFFSET_VALUE_PMIL = (0x48, HexFieldFormats.PERMILLE, SensorType.HUMIDITY)
   """`Offset humidity by value` - permille absolute
   
   SPEC: 2 bytes, percentage, step is 0.1."""
-  SETTING_HUMIDITY_OFFSET_PMIL = (0x49, HexFieldFormats.PERMILLE)
+  SETTING_HUMIDITY_OFFSET_PMIL = (0x49, HexFieldFormats.PERMILLE, SensorType.HUMIDITY)
   """`Offset humidity by percentage` - permille relative
   
   SPEC: 2 bytes, percentage, step is 0.1%."""
-  SETTING_PM25_OFFSET_VALUE = (0x4B, HexFieldFormats.UGM3)
+  SETTING_PM25_OFFSET_VALUE = (0x4B, HexFieldFormats.UGM3, SensorType.PM25)
   """`Offset PM2.5 by value` - ug/m3
   
   SPEC: 2 bytes, value, step is 1."""
-  SETTING_PM25_OFFSET_PMIL = (0x4C, HexFieldFormats.PERMILLE)
+  SETTING_PM25_OFFSET_PMIL = (0x4C, HexFieldFormats.PERMILLE, SensorType.PM25)
   """`Offset CO2 by percentage` - permille
   
   SPEC: 2 bytes, percentage, step is 0.1%."""
-  SETTING_PM10_OFFSET_VALUE = (0x4D, HexFieldFormats.UGM3)
+  SETTING_PM10_OFFSET_VALUE = (0x4D, HexFieldFormats.UGM3, SensorType.PM10)
   """`Offset PM10 by value` - ug/m3
   
   SPEC: 2 bytes, value, step is 1."""
-  SETTING_PM10_OFFSET_PMIL = (0x4E, HexFieldFormats.PERMILLE)
+  SETTING_PM10_OFFSET_PMIL = (0x4E, HexFieldFormats.PERMILLE, SensorType.PM10)
   """`Offset PM10 by percentage` - permille
   
   SPEC: 2 bytes, percentage, step is 0.1%."""
@@ -313,83 +314,83 @@ class HexKey(IntEnum):
   """`Event of battery low` - low battery, likely last report before shutdown
   
   SPEC: Over-limit event."""
-  EVT_TEMPERATURE_HIGHER = (0x07, HexFieldFormats.FLAG)
+  EVT_TEMPERATURE_HIGHER = (0x07, HexFieldFormats.FLAG, SensorType.TEMPERATURE)
   """`Report when higher than a temperature value`
   
   SPEC: Over-limit event."""
-  EVT_TEMPERATURE_LOWER = (0x08, HexFieldFormats.FLAG)
+  EVT_TEMPERATURE_LOWER = (0x08, HexFieldFormats.FLAG, SensorType.TEMPERATURE)
   """`Report when lower than a temperature value`
   
   SPEC: Over-limit event."""
-  EVT_HUMIDITY_HIGHER = (0x0A, HexFieldFormats.FLAG)
+  EVT_HUMIDITY_HIGHER = (0x0A, HexFieldFormats.FLAG, SensorType.HUMIDITY)
   """`Report when higher than a humidity value`
   
   SPEC: Over-limit event."""
-  EVT_HUMIDITY_LOWER = (0x0B, HexFieldFormats.FLAG)
+  EVT_HUMIDITY_LOWER = (0x0B, HexFieldFormats.FLAG, SensorType.HUMIDITY)
   """`Report when lower than a humidity value`
   
   SPEC: Over-limit event."""
-  EVT_PRESSURE_HIGHER = (0x0D, HexFieldFormats.FLAG)
+  EVT_PRESSURE_HIGHER = (0x0D, HexFieldFormats.FLAG, SensorType.PRESSURE)
   """`Report when higher than an air pressure value`
   
   SPEC: Over-limit event."""
-  EVT_PRESSURE_LOWER = (0x0E, HexFieldFormats.FLAG)
+  EVT_PRESSURE_LOWER = (0x0E, HexFieldFormats.FLAG, SensorType.PRESSURE)
   """`Report when lower than an air pressure value`
   
   SPEC: Over-limit event."""
-  EVT_AUXTEMP_HIGHER = (0x29, HexFieldFormats.FLAG)
+  EVT_AUXTEMP_HIGHER = (0x29, HexFieldFormats.FLAG, SensorType.TEMPERATURE_AUX)
   """`Report when higher than an AUX temperature value`
   
   SPEC: Over-limit event."""
-  EVT_AUXTEMPT_LOWER = (0x2A, HexFieldFormats.FLAG)
+  EVT_AUXTEMPT_LOWER = (0x2A, HexFieldFormats.FLAG, SensorType.TEMPERATURE_AUX)
   """`Report when lower than an AUX temperature value`
   
   SPEC: Over-limit event."""
-  EVT_CO2_HIGHER = (0x39, HexFieldFormats.FLAG)
+  EVT_CO2_HIGHER = (0x39, HexFieldFormats.FLAG, SensorType.CO2)
   """`Report when higher than a CO2 value`
   
   SPEC: Over-limit event."""
-  EVT_CO2_LOWER = (0x3A, HexFieldFormats.FLAG)
+  EVT_CO2_LOWER = (0x3A, HexFieldFormats.FLAG, SensorType.CO2)
   """`Report when lower than a CO2 value`
   
   SPEC: Over-limit event."""
-  EVT_TVOC_HIGHER = (0x57, HexFieldFormats.FLAG)
+  EVT_TVOC_HIGHER = (0x57, HexFieldFormats.FLAG, SensorType.TVOC)
   """`Report when higher than a TVOC value`
   
   SPEC: Over-limit event."""
-  EVT_TVOC_LOWER = (0x58, HexFieldFormats.FLAG)
+  EVT_TVOC_LOWER = (0x58, HexFieldFormats.FLAG, SensorType.TVOC)
   """`Report when lower than a TVOC value`
   
   SPEC: Over-limit event."""
-  EVT_PM25_HIGHER = (0x59, HexFieldFormats.FLAG)
+  EVT_PM25_HIGHER = (0x59, HexFieldFormats.FLAG, SensorType.PM25)
   """`Report when higher than a PM2.5 value`
   
   SPEC: Over-limit event."""
-  EVT_PM25_LOWER = (0x5A, HexFieldFormats.FLAG)
+  EVT_PM25_LOWER = (0x5A, HexFieldFormats.FLAG, SensorType.PM25)
   """`Report when lower than a PM2.5 value`
   
   SPEC: Over-limit event."""
-  EVT_PM10_HIGHER = (0x5B, HexFieldFormats.FLAG)
+  EVT_PM10_HIGHER = (0x5B, HexFieldFormats.FLAG, SensorType.PM10)
   """`Report when higher than a PM10 value`
   
   SPEC: Over-limit event."""
-  EVT_PM10_LOWER = (0x5C, HexFieldFormats.FLAG)
+  EVT_PM10_LOWER = (0x5C, HexFieldFormats.FLAG, SensorType.PM10)
   """`Report when lower than a PM10 value`
   
   SPEC: Over-limit event."""
-  EVT_NOISE_HIGHER = (0x5D, HexFieldFormats.FLAG)
+  EVT_NOISE_HIGHER = (0x5D, HexFieldFormats.FLAG, SensorType.NOISE)
   """`Report when higher than a noise value`
   
   SPEC: Over-limit event."""
-  EVT_NOISE_LOWER = (0x5E, HexFieldFormats.FLAG)
+  EVT_NOISE_LOWER = (0x5E, HexFieldFormats.FLAG, SensorType.NOISE)
   """`Report when lower than a noise value`
   
   SPEC: Over-limit event."""
-  EVT_LIGHT_HIGHER = (0x5F, HexFieldFormats.FLAG)
+  EVT_LIGHT_HIGHER = (0x5F, HexFieldFormats.FLAG, SensorType.LIGHT)
   """`Report when higher than a light value`
   
   SPEC: Over-limit event."""
-  EVT_LIGHT_LOWER = (0x60, HexFieldFormats.FLAG)
+  EVT_LIGHT_LOWER = (0x60, HexFieldFormats.FLAG, SensorType.LIGHT)
   """`Report when lower than a light value`
   
   SPEC: Over-limit event."""
@@ -430,27 +431,27 @@ class HexKey(IntEnum):
   SPEC: 1 byte. 1: perform calibration."""
   
   # sensor data fields
-  DATA_PRESSURE_HISTORICAL = (0x2D, HexFieldFormats.PRESSURE_PRECISE)
+  DATA_PRESSURE_HISTORICAL = (0x2D, HexFieldFormats.PRESSURE_PRECISE, SensorType.PRESSURE)
   """`Historical data reporting (air pressure 0.01 pa)`
   
   SPEC: The air pressure uses 4 bytes, and the others use 2 bytes."""
-  DATA_PRESSURE_REALTIME = (0x2E, HexFieldFormats.PRESSURE_PRECISE)
+  DATA_PRESSURE_REALTIME = (0x2E, HexFieldFormats.PRESSURE_PRECISE, SensorType.PRESSURE)
   """`Historical data reporting (air pressure 0.01 pa)`
   
   SPEC: The air pressure uses 4 bytes, and the others use 2 bytes."""
-  DATA_MAIN_TH_OFFSET = (0x2F, HexFieldFormats.TH_OFFSET)
+  DATA_MAIN_TH_OFFSET = (0x2F, HexFieldFormats.TH_OFFSET) # TODO: ??
   """`Main body temperature and humidity offset`
   
   SPEC: 2 bytes temperature (step is 0.1) + 2 bytes humidity (step is 0.1)."""
-  DATA_AUX_TH_OFFSET = (0x30, HexFieldFormats.TH_OFFSET)
+  DATA_AUX_TH_OFFSET = (0x30, HexFieldFormats.TH_OFFSET) # TODO: ??
   """`AUX temperature and humidity offset`
   
   SPEC: 2 bytes temperature (step is 0.1) + 2 bytes humidity (step is 0.1)."""
-  DATA_PRESSURE_OFFSET = (0x31, HexFieldFormats.PRESSURE_OFFSET)
+  DATA_PRESSURE_OFFSET = (0x31, HexFieldFormats.PRESSURE_OFFSET, SensorType.PRESSURE)
   """`Air pressure offset` - 0.1 Pa???
   
   SPEC: 2 bytes (step is 0.1)."""
-  DATA_AUX_TH = (0x32, HexFieldFormats.SENSOR_AUX_TH)
+  DATA_AUX_TH = (0x32, HexFieldFormats.SENSOR_AUX_TH) # TODO: ??
   """`AUX temperature and humidity data`
   
   SPEC: 2 bytes temperature (positive offset 500) + 2 bytes humidity."""
@@ -467,8 +468,10 @@ class HexKey(IntEnum):
   """Unknown Key, attempt to parse as TLV with raw bytes value"""
 
   fmt: HexFieldFormats
-  def __new__(cls, value, fmt):
+  associated_sensor: SensorType | None
+  def __new__(cls, value, fmt, associated_sensor=None):
     obj = int.__new__(cls, value)
     obj._value_ = value
     obj.fmt = fmt
+    obj.associated_sensor = associated_sensor
     return obj

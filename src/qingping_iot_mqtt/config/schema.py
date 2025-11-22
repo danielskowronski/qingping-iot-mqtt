@@ -4,7 +4,7 @@
 import platform
 from typing import Optional
 from pydantic import BaseModel
-from qingping_iot_mqtt.protocols.base import ProtocolName
+from qingping_iot_mqtt.protocols.common_spec import ProtocolName, DeviceModel
 
 class BrokerConfig(BaseModel):
   host: str
@@ -20,8 +20,13 @@ class DeviceConfig(BaseModel):
   topic_up: str
   topic_down: str
   protocol: ProtocolName
-  model: str # FIXME, should be Enum or better class to handle models and capabilities
+  model: DeviceModel=DeviceModel.UNKNOWN
+
+class LoggingDatabase(BaseModel):
+  sqlite_path: str
+  enabled: bool = False
 
 class CliConfig(BaseModel):
   broker: BrokerConfig
   devices: list[DeviceConfig]
+  logging_db: Optional[LoggingDatabase] = None

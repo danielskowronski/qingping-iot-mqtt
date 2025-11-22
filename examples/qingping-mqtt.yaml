@@ -26,3 +26,6 @@ devices:
     topic_down: "qingping/000000000003/down"
     protocol: "hex"
     model: "CGP22C"
+logging_db:
+  sqlite_path: "../qingping_mqtt.sqlite3"
+  enabled: true

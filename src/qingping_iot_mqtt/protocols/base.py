@@ -6,21 +6,9 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from typing import Iterable, Optional, Protocol as TypingProtocol, Mapping, Any
-from enum import Enum, StrEnum, IntEnum, auto
+from enum import Enum, IntEnum, auto
 from datetime import datetime, timedelta, time
-
-class ProtocolName(StrEnum):
-  HEX = "hex"
-  JSON = "json"
-  UNKNOWN = "unknown"
-  @classmethod
-  def identify(cls, data: bytes) -> ProtocolName:
-    """Identify ProtocolName from payload, based on magic ID."""
-    if data.startswith(b'\x43\x47'):
-      return ProtocolName.HEX
-    if data.startswith(b'{') and data.endswith(b'}'):
-      return ProtocolName.JSON
-    return ProtocolName.UNKNOWN
+from qingping_iot_mqtt.protocols.common_spec import SensorType
 
 class SensorReadingType(Enum):
   REALTIME = auto()
@@ -36,39 +24,46 @@ class ProtocolMessageCategory(Enum):
   COMMAND = auto() # generic
   # TODO: implement others as needed
 
-class SensorType(Enum):
-  BATTERY = auto()
-  TEMPERATURE = auto()
-  TEMPERATURE_AUX = auto()
-  PRESSURE = auto()
-  HUMIDITY = auto()
-  HUMIDITY_AUX = auto()
-  PM1 = auto()
-  PM25 = auto()
-  PM10 = auto()
-  CO2 = auto()
-  CO2_CONC = auto()
-  VOC = auto()
-  NOISE = auto()
-  LIGHT = auto()
-  TVOC = auto()
-  RADON = auto()
-  SIGNAL_STRENGTH = auto()
-  # FIXME: implement field to indicate whether ranges are supported
+
 
 class SensorReadingStatus(IntEnum):
   NORMAL = 0
   ABNORMAL = 1
   INITIALIZE = 2
 
-@dataclass(frozen=True)
+@dataclass
 class SensorReading:
   """Single sensor reading data point."""
   sensor: SensorType
   value: float # FIXME: use Decimal?
   unit: str # either self-repoted or fixed per sensor type # TODO: this should be an Enum
+  level: Optional[int] = None
+  status: SensorReadingStatus = SensorReadingStatus.NORMAL
+  status_duration: Optional[int] = None
+  status_start_time: Optional[int] = None
+  def format_status(self, simple: bool = True) -> str:
+    if self.status == SensorReadingStatus.NORMAL:
+      return "ok"
+    elif self.status == SensorReadingStatus.ABNORMAL:
+      if self.level is not None:
+        if self.value > self.level:
+          if simple:
+            return "higher"
+          else:
+            return f"abnormal: >{self.level}{self.unit}"
+        else:
+          if simple:
+            return "lower"
+          else:
+            return f"abnormal: <{self.level}{self.unit}"
+      else:
+        return "abnormal"
+    elif self.status == SensorReadingStatus.INITIALIZE:
+      return "init"
+    else:
+      return "unknown"
   def __str__(self) -> str:
-    return f"SensorReading(sensor={self.sensor.name}, value={self.value}, unit={self.unit})"
+    return f"SensorReading(sensor={self.sensor.name}, value={self.value}, unit={self.unit}, status='{self.format_status(simple=False)}')"
 
 
 @dataclass(frozen=True)
@@ -80,13 +75,9 @@ class SensorReadingsContext:
   origin: SensorReadingType
   timestamp: int # FIXME: use datetime?
   readings: Iterable[SensorReading]
-  status: SensorReadingStatus # TODO: verify this is for alerts
-  level: Optional[int] = None
-  status_duration: Optional[int] = None
-  status_start_time: Optional[int] = None
   
   def __str__(self) -> str:
-    return f"SensorReadingsContext(origin={self.origin.name}, timestamp={self.timestamp}, local_date='{datetime.fromtimestamp(self.timestamp)}' status={self.status.name}, readings_count={len(list(self.readings))})"
+    return f"SensorReadingsContext(origin={self.origin.name}, timestamp={self.timestamp}, local_date='{datetime.fromtimestamp(self.timestamp)}', readings_count={len(list(self.readings))})"
   
   def dump(self) -> str:
     msg = self.__str__()
@@ -405,10 +396,12 @@ class SensorReadingsContainer():
   - historical (initiated by server when requesting past data stored on device)
     dynamic number of entries depending on how many readings were stored in requested period
   """
-  readings: Iterable[SensorReadingsContext]
+  readings: Iterable[SensorReadingsContext] = field(default_factory=list)
   category: ProtocolMessageCategory = field(
     default=ProtocolMessageCategory.READINGS
   )
+  def get_reading_contexts(self) -> Iterable[SensorReadingsContext]:
+    return self.readings
   def __init__(self, message: ProtocolMessage):
     pass
   def dump(self) -> str:

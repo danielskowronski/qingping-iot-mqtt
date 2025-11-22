@@ -5,12 +5,13 @@ import click
 
 from qingping_iot_mqtt.__about__ import __version__
 from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection, ProtocolMessageCategory
-from qingping_iot_mqtt.protocols.hex import HexProtocol, HexFrame, HexSensorReadingMessage, HexProtocolMesssage
-from qingping_iot_mqtt.config.schema import CliConfig
+from qingping_iot_mqtt.protocols.hex import HexProtocol, HexFrame, HexSensorReadingMessage
 from qingping_iot_mqtt.config.load import load_cli_config
 from qingping_iot_mqtt.cli.mqtt import run_mqtt_loop
+from qingping_iot_mqtt.cli.db import initialize_db
 
-import coloredlogs, logging
+import coloredlogs
+import logging
 logger = logging.getLogger(__name__)
 
 
@@ -44,10 +45,7 @@ def _decode_hex_payload(raw: bytes, direction: ProtocolMessageDirection):
     return
   protocol = HexProtocol()
   message = protocol.decode_message(raw, direction)
-  if hasattr(message, "dump"):
-    click.echo(message.dump())
-  else:
-    click.echo(f"Command: 0x{message.frame.cmd:02X} ({message.category.name})")
+  click.echo(message.dump())
   if message.category == ProtocolMessageCategory.READINGS:
     click.echo(HexSensorReadingMessage(message).dump())
 
@@ -73,12 +71,14 @@ def qingping_iot_mqtt(ctx: click.Context, cfg: str, verbosity: int) -> None:
 
 
 @qingping_iot_mqtt.command("subscribe")
-@click.option("--log-db", type=click.Path(dir_okay=False, writable=True), help="Path to SQLite database to log sensor readings.")
+# TODO: consider logging directly to time-series DB like InfluxDB (HA and Prometheus do not support importing past events)
 @click.pass_context
-def subscribe(ctx: click.Context, log_db: str):
+def subscribe(ctx: click.Context):
   """Subscribe to Qingping IoT MQTT broker and process live messages."""
   cfg_path = ctx.obj["cfg"]
   cfg=load_cli_config(cfg_path)
+  if cfg.logging_db:
+    initialize_db(cfg.logging_db, cfg.devices)
   run_mqtt_loop(cfg)
   
 
@@ -110,7 +110,7 @@ def manual_decode(ctx: click.Context, payload_hex: str):
   direction = _resolve_direction(settings.get("direction"), ProtocolMessageDirection.DEVICE_TO_SERVER)
   _ensure_hex_proto(proto)
   raw = _parse_hex_string("payload", payload_hex)
-  click.echo(f"Protocol: HEX")
+  click.echo("Protocol: HEX")
   click.echo(f"Direction: {direction.name}")
   _decode_hex_payload(raw, direction)
 
@@ -130,6 +130,6 @@ def manual_encode(ctx: click.Context, raw_cmd_hex: str, payload_hex: str):
     raise click.BadParameter("raw-cmd must describe exactly one byte.")
   payload_bytes = _parse_hex_string("payload", payload_hex, allow_empty=True)
   frame = HexFrame.construct_frame(cmd_bytes[0], payload_bytes)
-  click.echo(f"Protocol: HEX")
+  click.echo("Protocol: HEX")
   click.echo(f"Direction: {direction.name}")
   click.echo(f"Frame: {frame.frame.hex()}")

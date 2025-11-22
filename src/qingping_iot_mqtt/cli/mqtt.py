@@ -2,17 +2,21 @@
 #
 # SPDX-License-Identifier: BSD-3-Clause
 from qingping_iot_mqtt.config.schema import CliConfig, BrokerConfig, DeviceConfig
-from qingping_iot_mqtt.protocols.base import ProtocolName
+from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection, ProtocolMessageCategory
+from qingping_iot_mqtt.protocols.common_spec import ProtocolName
+from qingping_iot_mqtt.protocols.hex import HexProtocol, HexSensorReadingMessage
 from paho.mqtt import client as mqtt_client
+from qingping_iot_mqtt.cli.db import log_sensor_reading, log_raw_payload
 import json
 import click
-from dataclasses import dataclass
+
 import logging
 logger = logging.getLogger(__name__)
 
 TRUNCATE_LENGTH = 128
 
 prefixes_map: dict[str, str] = {}
+direction_map: dict[str, ProtocolMessageDirection] = {}
 
 def connect_mqtt(brokerConfig: BrokerConfig) -> mqtt_client.Client:
   def on_connect(client, userdata, flags, rc):
@@ -51,11 +55,25 @@ def format_payload_logging(payload: bytes) -> str:
 def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
   def on_message(client, userdata, msg):
     logging.info(f"{prefixes_map.get(msg.topic, '!!')} {format_payload_logging(msg.payload)}")
+    log_raw_payload(msg.topic, msg.payload)
+    try:
+      proto = ProtocolName.identify(msg.payload)
+      if proto == ProtocolName.HEX:
+        proto_msg = HexProtocol().decode_message(msg.payload, direction=direction_map.get(msg.topic, ProtocolMessageDirection.DEVICE_TO_SERVER))
+        if proto_msg is not None and proto_msg.category == ProtocolMessageCategory.READINGS:
+          readings_ctx = HexSensorReadingMessage(proto_msg)
+          logging.debug(f"Decoded readings: {readings_ctx.dump()}")
+          for rctx in readings_ctx.get_reading_contexts():
+            log_sensor_reading(msg.topic, rctx)
+    except Exception as e:
+      logger.error(f"Error processing message on topic {msg.topic}: {e}")
 
   for device in devices:
-    prefixes_map[device.topic_up] = f"{device.alias}<"
-    client.subscribe(device.topic_up)
     prefixes_map[device.topic_up] = f"{device.alias}>"
+    direction_map[device.topic_up] = ProtocolMessageDirection.DEVICE_TO_SERVER
+    client.subscribe(device.topic_up)
+    prefixes_map[device.topic_down] = f"{device.alias}<"
+    direction_map[device.topic_down] = ProtocolMessageDirection.SERVER_TO_DEVICE
     client.subscribe(device.topic_down)
   client.on_message = on_message
 
