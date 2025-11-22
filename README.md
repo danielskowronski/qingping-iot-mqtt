@@ -13,7 +13,7 @@ References:
 
 ## Scope
 
-This library and set of utilities are designed for both protocols. Ultimately, a Home Assistant integration will be created, but main goal for this repository is to have encoder/decoder of both protocols working with CLI inputs and connected to MQTT broker. Additionaly, there will be some simple ways of storing all data from devices (SQL or Time-Series DBs to store data coming from historical reports, as HA and Prometheus do not support pushing).
+This library and set of utilities are designed for both protocols. Ultimately, a Home Assistant integration will be created, but main goal for this repository is to have encoder/decoder of both protocols working with CLI inputs and connected to MQTT broker (including automatic acks, required by some devices). Additionaly, there will be some simple ways of storing all data from devices (SQL or Time-Series DBs to store data coming from historical reports, as HA and Prometheus do not support pushing).
 
 MQTT broker configuration is not part of this project.
 

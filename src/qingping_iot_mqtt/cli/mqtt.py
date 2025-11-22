@@ -56,6 +56,7 @@ def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
   def on_message(client, userdata, msg):
     logging.info(f"{prefixes_map.get(msg.topic, '!!')} {format_payload_logging(msg.payload)}")
     log_raw_payload(msg.topic, msg.payload)
+    # TODO: handle some required server responses like JSON type 10 
     try:
       proto = ProtocolName.identify(msg.payload)
       if proto == ProtocolName.HEX:
