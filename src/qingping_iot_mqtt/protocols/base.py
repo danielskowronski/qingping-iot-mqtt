@@ -21,6 +21,7 @@ class ProtocolMessageCategory(Enum):
   READINGS = auto()
   SETTINGS = auto()
   REPROVISION = auto() # WiFi and MQTT change
+  HANDSHAKE = auto()
   COMMAND = auto() # generic
   # TODO: implement others as needed
 
@@ -381,6 +382,9 @@ class ProtocolMessage:
   def dump(self) -> str:
     """Dump message content for debugging purposes."""
     return f"ProtocolMessage(direction={self.direction.name}, category={self.category.name}, body_len={len(self.body)} bytes>"
+  def needs_ack(self) -> bool:
+    """Check if this message requires an acknowledgment."""
+    return False
 
 
 class SensorReadingsContainer():

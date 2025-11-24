@@ -16,6 +16,9 @@ from enum import Enum, IntEnum, StrEnum
 from typing import Optional
 
 from .base import (
+  SensorReading,
+  SensorReadingType,
+  SensorReadingsContext,
   SensorType,
   SensorReadingStatus
 )
@@ -207,6 +210,88 @@ class JsonSensorData:
     """nested encode to format used in JSON protocol messages (omit None fields)"""
     data = {k: v.encode() for k, v in asdict(self).items() if v is not None}
     return data
+  
+  @classmethod
+  def fromdict(cls, data: dict[str, object]) -> JsonSensorData:
+    """construct JsonSensorData from dictionary (e.g. parsed from JSON)"""
+    fields = {}
+    for key, value in data.items():
+      if not isinstance(value, dict):
+        raise ValueError(f"Invalid value for JsonSensorData field {key}: expected dict, got {type(value)}")
+      vv = value.get("value") 
+      if vv is None:
+        raise ValueError(f"Invalid value for JsonSensorData field {key}: missing 'value' key")
+      if not isinstance(vv, (int, float)):
+        raise ValueError(f"Invalid value for JsonSensorData field {key}: 'value' must be int or float")
+      fields[key] = JsonSensorDataSubEntry(
+        value=vv,
+        status=SensorReadingStatus(value.get("status")) if "status" in value else None,
+        level=value.get("level"),
+        unit=value.get("unit"),
+        status_duration=value.get("status_duration"),
+        status_start_time=value.get("status_start_time"),
+      )
+    return cls(**fields)
+  def to_context(self, origin: SensorReadingType) -> SensorReadingsContext:
+    ctx: SensorReadingsContext
+    timestamp = self.timestamp.value
+    readings: list[SensorReading] = []
+    if self.battery:
+      readings.append(SensorReading(sensor=SensorType.BATTERY,
+                                    value=self.battery.value,
+                                    status=self.battery.status or SensorReadingStatus.NORMAL,
+                                    unit=self.battery.unit or "%",
+                                    ))
+    if self.temperature:
+      readings.append(SensorReading(sensor=SensorType.TEMPERATURE,
+                                    value=self.temperature.value,
+                                    status=self.temperature.status or SensorReadingStatus.NORMAL,
+                                    unit=self.temperature.unit or "°C",
+                                    ))
+    if self.humidity:
+      readings.append(SensorReading(sensor=SensorType.HUMIDITY,
+                                    value=self.humidity.value,
+                                    status=self.humidity.status or SensorReadingStatus.NORMAL,
+                                    unit=self.humidity.unit or "%",
+                                    ))
+    if self.pm1:
+      readings.append(SensorReading(sensor=SensorType.PM1,
+                                    value=self.pm1.value,
+                                    status=self.pm1.status or SensorReadingStatus.NORMAL,
+                                    unit=self.pm1.unit or "µg/m³",
+                                    ))
+    if self.pm25:
+      readings.append(SensorReading(sensor=SensorType.PM25,
+                                    value=self.pm25.value,
+                                    status=self.pm25.status or SensorReadingStatus.NORMAL,
+                                    unit=self.pm25.unit or "µg/m³",
+                                    ))
+    if self.pm10:
+      readings.append(SensorReading(sensor=SensorType.PM10,
+                                    value=self.pm10.value,
+                                    status=self.pm10.status or SensorReadingStatus.NORMAL,
+                                    unit=self.pm10.unit or "µg/m³",
+                                    ))
+    if self.co2:
+      readings.append(SensorReading(sensor=SensorType.CO2,
+                                    value=self.co2.value,
+                                    status=self.co2.status or SensorReadingStatus.NORMAL,
+                                    unit=self.co2.unit or "ppm",
+                                    ))
+    ctx = SensorReadingsContext(
+      origin=origin,
+      timestamp=int(timestamp),
+      readings=readings
+    )
+    return ctx
+    # FIXME: implement other sensors when needed
+  def dump(self) -> str:
+    msg = "JsonSensorData:"
+    for key, value in asdict(self).items():
+      if value is not None:
+        msg += f"\n  - {key}: {value}"
+    return msg
+    
 
 @dataclass(init=False)
 class JsonWiFiInfo():

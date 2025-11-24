@@ -5,6 +5,7 @@ from qingping_iot_mqtt.config.schema import CliConfig, BrokerConfig, DeviceConfi
 from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection, ProtocolMessageCategory
 from qingping_iot_mqtt.protocols.common_spec import ProtocolName
 from qingping_iot_mqtt.protocols.hex import HexProtocol, HexSensorReadingMessage
+from qingping_iot_mqtt.protocols.json import JsonProtocol, JsonSensorReadingMessage
 from paho.mqtt import client as mqtt_client
 from qingping_iot_mqtt.cli.db import log_sensor_reading as db_log_sensor_reading, log_raw_payload as db_log_raw_payload
 from qingping_iot_mqtt.cli.vm import log_sensor_reading as vm_log_sensor_reading
@@ -81,6 +82,17 @@ def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
           for rctx in readings_ctx.get_reading_contexts():
             db_log_sensor_reading(msg.topic, rctx)
             vm_log_sensor_reading(msg.topic, rctx)
+      elif proto == ProtocolName.JSON:
+        proto_msg = JsonProtocol().decode_message(msg.payload, direction=direction_map.get(msg.topic, ProtocolMessageDirection.DEVICE_TO_SERVER))
+        if proto_msg is not None and proto_msg.category == ProtocolMessageCategory.READINGS:
+          readings_ctx = JsonSensorReadingMessage(proto_msg)
+          logging.info(f"Decoded readings: {readings_ctx.dump()}")
+          for rctx in readings_ctx.get_reading_contexts():
+            db_log_sensor_reading(msg.topic, rctx)
+            vm_log_sensor_reading(msg.topic, rctx)
+        if proto_msg is not None and proto_msg.needs_ack():
+          logger.debug(f"Message on topic {msg.topic} requires ACK, should be sending it...")
+
     except Exception as e:
       logger.error(f"Error processing message on topic {msg.topic}: {e}")
 
