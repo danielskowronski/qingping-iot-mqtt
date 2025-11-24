@@ -14,6 +14,8 @@ import click
 import logging
 logger = logging.getLogger(__name__)
 
+_config: CliConfig
+
 TRUNCATE_LENGTH = 128
 
 prefixes_map: dict[str, str] = {}
@@ -26,12 +28,23 @@ def connect_mqtt(brokerConfig: BrokerConfig) -> mqtt_client.Client:
     else:
       logger.error(f"Failed to connect, return code {rc}")
       raise click.ClickException("Failed to connect, return code.")
+    subscribe(_config.devices, client)
 
   client = mqtt_client.Client(
     client_id=brokerConfig.client_id,
     clean_session=brokerConfig.clean_session,
   )
+  def on_disconnect(client, userdata, rc):
+    if rc != 0:
+      logger.warning("Unexpected MQTT disconnection. Reconnecting...")
+      try:
+        client.reconnect()
+      except Exception as e:
+        logger.error(f"Reconnection failed: {e}")
+    else:
+      logger.info("MQTT client disconnected successfully.")
   client.on_connect = on_connect
+  client.on_disconnect = on_disconnect
   client.username_pw_set(brokerConfig.username, brokerConfig.password)
   logger.debug(f"Connecting to MQTT broker at {brokerConfig.host}:{brokerConfig.port}...")
   client.connect(brokerConfig.host, brokerConfig.port, brokerConfig.keepalive)
@@ -75,12 +88,16 @@ def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
     prefixes_map[device.topic_up] = f"{device.alias}>"
     direction_map[device.topic_up] = ProtocolMessageDirection.DEVICE_TO_SERVER
     client.subscribe(device.topic_up)
+    logger.debug(f"Subscribed to topic {device.topic_up} for device {device.alias} ({device.mac}) to server")
     prefixes_map[device.topic_down] = f"{device.alias}<"
     direction_map[device.topic_down] = ProtocolMessageDirection.SERVER_TO_DEVICE
     client.subscribe(device.topic_down)
+    logger.debug(f"Subscribed to topic {device.topic_up} for server to device {device.alias} ({device.mac})")
+
   client.on_message = on_message
 
 def run_mqtt_loop(config: CliConfig):
-  client = connect_mqtt(config.broker)
-  subscribe(config.devices, client)
+  global _config
+  _config = config
+  client = connect_mqtt(_config.broker)
   client.loop_forever()

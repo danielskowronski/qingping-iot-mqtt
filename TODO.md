@@ -4,9 +4,9 @@
 
 - [.] 1a - abstract classes and HEX protocol
 - [.] 1b - CLI
-- [.] 2 - MQTT connector and simple DB logging
-- [ ] 3 - JSON protocol
-- [ ] 4 - ext - Home Assistant
+- [.] 2 - MQTT connector and simple DB logging and VictoriaMetrics
+- [.] 3 - JSON protocol
+- [ ] 5 - HomeAssistant
 
 ## phase 1 - HEX
 
@@ -22,7 +22,12 @@
 - [x] SQLite connector and logging - storing events and raw
 - [ ] SQLite connector - parsing replays
 - [ ] CLI for W
+- [.] VictoriaMetrics
 
 ## phase 3 - JSON
 
-same as HEX
+- [.] protocol, message, payloads, primitive interpretation
+- [ ] sensor readings from all types of reports - container, decoding
+- [ ] config - container, decoding RW, encoding W
+- [ ] command - container, handle generic and re-provision (MQTT, Wi-Fi), encoding W
+- [ ] reasonable CLI to handle all of that

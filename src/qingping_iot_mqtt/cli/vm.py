@@ -7,6 +7,7 @@ import datetime
 import logging
 import json
 from qingping_iot_mqtt.protocols.common_spec import SensorType
+import qingping_iot_mqtt.const as const
 import requests
 logger = logging.getLogger(__name__)
 
@@ -77,16 +78,25 @@ def log_sensor_reading(topic: str, ctx: SensorReadingsContext) -> None:
     payload += json.dumps(entry) + "\n"
   if not payload:
     return
-  try:
-    response = requests.post(
-      url=_vm_config.import_endpoint,
-      data=payload,
-      auth=( _vm_config.user, _vm_config.password ),
-      headers={ "Content-Type": "application/json" },
-      verify=_verify,
-      timeout=5
-    )
-    if response.status_code not in [200, 204]:
-      logger.error(f"Failed to log to Victoria Metrics, status code {response.status_code}: {response.text}")
-  except Exception as e:
-    logger.error(f"Error logging to Victoria Metrics: {e}")
+  
+  attempt = 0
+  while attempt < _vm_config.retry_attempts if _vm_config.retry_attempts else const.DEFAULT_RETRY_ATTEMPTS:
+    attempt += 1
+    try:
+      response = requests.post(
+        url=_vm_config.import_endpoint,
+        data=payload,
+        auth=( _vm_config.user, _vm_config.password ),
+        headers={ "Content-Type": "application/json" },
+        verify=_verify,
+        timeout=5
+      )
+      if response.status_code not in [200, 204]:
+        logger.error(f"Failed to log to Victoria Metrics, status code {response.status_code}: {response.text}")
+      else:
+        logger.debug(f"Successfully logged sensor readings to Victoria Metrics for device {device.alias} ({device.mac}).")
+        return
+    except Exception as e:
+      logger.error(f"Error logging to Victoria Metrics: {e}")
+  logger.error(f"Exceeded maximum retry attempts ({_vm_config.retry_attempts}) for Victoria Metrics logging.")
+  

@@ -5,6 +5,7 @@ import platform
 from typing import Optional
 from pydantic import BaseModel
 from qingping_iot_mqtt.protocols.common_spec import ProtocolName, DeviceModel
+import qingping_iot_mqtt.const as const
 
 class BrokerConfig(BaseModel):
   host: str
@@ -34,6 +35,7 @@ class VictoriaMetricsConfig(BaseModel):
   password: str
   enabled: bool = False
   metrics_prefix: Optional[str] = "qingping_iot_"
+  retry_attempts: Optional[int] = const.DEFAULT_RETRY_ATTEMPTS
 
 class CliConfig(BaseModel):
   broker: BrokerConfig
