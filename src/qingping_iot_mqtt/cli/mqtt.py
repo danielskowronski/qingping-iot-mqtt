@@ -6,7 +6,8 @@ from qingping_iot_mqtt.protocols.base import ProtocolMessageDirection, ProtocolM
 from qingping_iot_mqtt.protocols.common_spec import ProtocolName
 from qingping_iot_mqtt.protocols.hex import HexProtocol, HexSensorReadingMessage
 from paho.mqtt import client as mqtt_client
-from qingping_iot_mqtt.cli.db import log_sensor_reading, log_raw_payload
+from qingping_iot_mqtt.cli.db import log_sensor_reading as db_log_sensor_reading, log_raw_payload as db_log_raw_payload
+from qingping_iot_mqtt.cli.vm import log_sensor_reading as vm_log_sensor_reading
 import json
 import click
 
@@ -55,7 +56,7 @@ def format_payload_logging(payload: bytes) -> str:
 def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
   def on_message(client, userdata, msg):
     logging.info(f"{prefixes_map.get(msg.topic, '!!')} {format_payload_logging(msg.payload)}")
-    log_raw_payload(msg.topic, msg.payload)
+    db_log_raw_payload(msg.topic, msg.payload)
     # TODO: handle some required server responses like JSON type 10 
     try:
       proto = ProtocolName.identify(msg.payload)
@@ -63,9 +64,10 @@ def subscribe(devices: list[DeviceConfig], client: mqtt_client.Client):
         proto_msg = HexProtocol().decode_message(msg.payload, direction=direction_map.get(msg.topic, ProtocolMessageDirection.DEVICE_TO_SERVER))
         if proto_msg is not None and proto_msg.category == ProtocolMessageCategory.READINGS:
           readings_ctx = HexSensorReadingMessage(proto_msg)
-          logging.debug(f"Decoded readings: {readings_ctx.dump()}")
+          logging.info(f"Decoded readings: {readings_ctx.dump()}")
           for rctx in readings_ctx.get_reading_contexts():
-            log_sensor_reading(msg.topic, rctx)
+            db_log_sensor_reading(msg.topic, rctx)
+            vm_log_sensor_reading(msg.topic, rctx)
     except Exception as e:
       logger.error(f"Error processing message on topic {msg.topic}: {e}")
 

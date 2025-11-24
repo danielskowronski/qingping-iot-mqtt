@@ -29,3 +29,9 @@ devices:
 logging_db:
   sqlite_path: "../qingping_mqtt.sqlite3"
   enabled: true
+victoria_metrics:
+  import_endpoint: "https://vmauth.local/insert/0/prometheus/api/v1/import"
+  user: "qingping-iot"
+  password: "securepassword"
+  metrics_prefix: "qingping_iot_"
+  enabled: true

@@ -7,7 +7,7 @@ from __future__ import annotations
 from dataclasses import dataclass, field
 from enum import StrEnum, Enum, auto
 
-class SensorType(Enum):
+class SensorType(StrEnum):
   BATTERY = auto()
   TEMPERATURE = auto()
   TEMPERATURE_AUX = auto()

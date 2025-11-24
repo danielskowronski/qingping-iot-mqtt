@@ -26,7 +26,17 @@ class LoggingDatabase(BaseModel):
   sqlite_path: str
   enabled: bool = False
 
+class VictoriaMetricsConfig(BaseModel):
+  import_endpoint: str
+  ignore_ssl_errors: Optional[bool] = False
+  custom_ca_certs_path: Optional[str] = None
+  user: str
+  password: str
+  enabled: bool = False
+  metrics_prefix: Optional[str] = "qingping_iot_"
+
 class CliConfig(BaseModel):
   broker: BrokerConfig
   devices: list[DeviceConfig]
   logging_db: Optional[LoggingDatabase] = None
+  victoria_metrics: Optional[VictoriaMetricsConfig] = None

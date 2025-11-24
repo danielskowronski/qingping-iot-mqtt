@@ -9,6 +9,7 @@ from qingping_iot_mqtt.protocols.hex import HexProtocol, HexFrame, HexSensorRead
 from qingping_iot_mqtt.config.load import load_cli_config
 from qingping_iot_mqtt.cli.mqtt import run_mqtt_loop
 from qingping_iot_mqtt.cli.db import initialize_db
+from qingping_iot_mqtt.cli.vm import initialize_vm
 
 import coloredlogs
 import logging
@@ -79,8 +80,10 @@ def subscribe(ctx: click.Context):
   cfg=load_cli_config(cfg_path)
   if cfg.logging_db:
     initialize_db(cfg.logging_db, cfg.devices)
+  if cfg.victoria_metrics:
+    initialize_vm(cfg.victoria_metrics, cfg.devices)
   run_mqtt_loop(cfg)
-  
+
 
 @qingping_iot_mqtt.group("manual")
 @click.option("--proto", type=click.Choice(["auto", "hex", "json"]), default="auto", show_default=True, help="Protocol to use.")
