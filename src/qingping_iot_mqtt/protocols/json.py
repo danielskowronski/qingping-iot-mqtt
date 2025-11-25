@@ -90,6 +90,8 @@ class JsonFrame:
       try:
         if isinstance(fmt, dataclass.__class__):
           decoded_value = fmt.value.fromdict(value)
+        elif hasattr(fmt.value, "qp_json_decode") and callable(getattr(fmt.value, "qp_json_decode")):
+          decoded_value = fmt.value.qp_json_decode(value)  # pyright: ignore[reportAttributeAccessIssue]
         else:
           decoded_value = fmt.value(value)
       except Exception as e:
@@ -114,7 +116,6 @@ class JsonProtocolMesssage(ProtocolMessage):
     self.frame = JsonFrame(body)
     self.direction = direction
     if self.frame.known.get(JsonKey.TYPE) is None:
-      breakpoint()
       raise JsonFrameError("No type field in JSON frame")
     self.frame_type = self.frame.known[JsonKey.TYPE]
     if self.frame_type in [
@@ -142,12 +143,12 @@ class JsonProtocolMesssage(ProtocolMessage):
       JsonCommand.DEVICE_LIST_RESPONSE,
       JsonCommand.DEVICE_LIST_NAMED_RESPONSE,
       JsonCommand.DATA_ACK,
-      JsonCommand.HEARTBEAT
     ]:
       self.category = ProtocolMessageCategory.HANDSHAKE
     elif self.frame_type in [
       JsonCommand.REALTIME_DATA,
       JsonCommand.NOTIFICATION,
+      JsonCommand.HEARTBEAT
     ]:
       self.category = ProtocolMessageCategory.READINGS
     elif self.frame_type in [
@@ -189,8 +190,9 @@ class JsonSensorReadingMessage(SensorReadingsContainer):
       raise ValueError("JsonSensorReadingMessage can only be constructed from READINGS message")
     if message.direction != ProtocolMessageDirection.DEVICE_TO_SERVER:
       raise ValueError("JsonSensorReadingMessage can only be constructed from DEVICE_TO_SERVER message")
-    logger.warning(f"Parsing JsonSensorReadingMessage from message type {message.frame_type}={message.frame_type.name}")
     if message.frame_type == JsonCommand.REALTIME_DATA:
+      # TODO: implement after encountering such message
+      raise NotImplementedError("REALTIME_DATA message parsing not implemented yet, got {message.frame}")
       pass
     elif message.frame_type == JsonCommand.HISTORICAL_DATA_OR_SETTINGS:
       sensor_data = message.frame.known.get(JsonKey.SENSOR_DATA)
@@ -203,12 +205,30 @@ class JsonSensorReadingMessage(SensorReadingsContainer):
           raise JsonSensorReadingMessageError("Invalid sensor data entry in HISTORICAL_DATA_OR_SETTINGS message")
         entry_parsed = JsonSensorData.fromdict(entry)
         self.readings.append(entry_parsed.to_context(origin=SensorReadingType.HISTORICAL))
-        
-      pass
     elif message.frame_type == JsonCommand.NOTIFICATION:
-      pass
+      # TODO: implement after encountering such message
+      raise NotImplementedError("NOTIFICATION message parsing not implemented yet, got {message.frame}")
+    elif message.frame_type == JsonCommand.HEARTBEAT:
+      if JsonKey.WIFI_INFO not in message.frame.known:
+        raise JsonSensorReadingMessageError("No WiFi info in HEARTBEAT message")
+      wifi_info: JsonWiFiInfo = message.frame.known.get(JsonKey.WIFI_INFO) # pyright: ignore[reportAssignmentType]
+      timestamp: JsonTimestamp = message.frame.known.get(JsonKey.TIMESTAMP) or JsonTimestamp(0)
+      try:
+        reading = SensorReading(
+          sensor=SensorType.SIGNAL_STRENGTH,
+          value=wifi_info.rssi,
+          unit="dBm"
+        )
+        ctx = SensorReadingsContext(
+          timestamp=timestamp.timestamp,
+          origin=SensorReadingType.REALTIME,
+          readings=[reading]
+        )
+        self.readings.append(ctx)
+      except JsonFrameError as e:
+        raise JsonSensorReadingMessageError("Invalid WiFi info in HEARTBEAT message") from e
     else:
-      raise JsonSensorReadingMessageError("JsonSensorReadingMessage can only be constructed from REALTIME_DATA, HISTORICAL_DATA_OR_SETTINGS or NOTIFICATION message")
+      raise JsonSensorReadingMessageError("JsonSensorReadingMessage can only be constructed from REALTIME_DATA, HISTORICAL_DATA_OR_SETTINGS, NOTIFICATION or HEARTBEAT message")
 
 class JsonProtocol(Protocol):#
   name = ProtocolName.JSON.name

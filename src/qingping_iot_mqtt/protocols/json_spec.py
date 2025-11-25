@@ -23,6 +23,9 @@ from .base import (
   SensorReadingStatus
 )
 
+import logging
+logger = logging.getLogger(__name__)
+
 @dataclass(init=False)
 class JsonDurationSeconds:
   seconds: int
@@ -183,6 +186,32 @@ class JsonSensorDataSubEntry:
   status_duration: Optional[int] = None
   status_start_time: Optional[int] = None
   
+  @classmethod
+  def fromdict(cls, data: dict[str, object]) -> JsonSensorDataSubEntry:
+    value = data.get("value")
+    if value is None:
+      raise ValueError("Missing 'value' key in JsonSensorDataSubEntry")
+    if not isinstance(value, (int, float)):
+      raise ValueError("Invalid 'value' type in JsonSensorDataSubEntry: expected int or float")
+    level = data.get("level")
+    if level is not None and not isinstance(level, int):
+      raise ValueError("Invalid 'level' type in JsonSensorDataSubEntry: expected int")
+    status_duration = data.get("status_duration")
+    if status_duration is not None and not isinstance(status_duration, int):
+      raise ValueError("Invalid 'status_duration' type in JsonSensorDataSubEntry: expected int")
+    status_start_time = data.get("status_start_time")
+    if status_start_time is not None and not isinstance(status_start_time, int):
+      raise ValueError("Invalid 'status_start_time' type in JsonSensorDataSubEntry: expected int")
+      
+    return cls(
+      value=value,
+      status=SensorReadingStatus(data.get("status")) if "status" in data else SensorReadingStatus.NORMAL,
+      level=level,
+      unit=str(data.get("unit")),
+      status_duration=status_duration,
+      status_start_time=status_start_time
+    )
+  
   def qp_json_encode(self) -> dict[str, object]:
     """encode to format used in JSON protocol messages (omit None fields)"""
     data = {k: v for k, v in asdict(self).items() if v is not None}
@@ -218,73 +247,38 @@ class JsonSensorData:
     for key, value in data.items():
       if not isinstance(value, dict):
         raise ValueError(f"Invalid value for JsonSensorData field {key}: expected dict, got {type(value)}")
-      vv = value.get("value") 
-      if vv is None:
-        raise ValueError(f"Invalid value for JsonSensorData field {key}: missing 'value' key")
-      if not isinstance(vv, (int, float)):
-        raise ValueError(f"Invalid value for JsonSensorData field {key}: 'value' must be int or float")
-      fields[key] = JsonSensorDataSubEntry(
-        value=vv,
-        status=SensorReadingStatus(value.get("status")) if "status" in value else None,
-        level=value.get("level"),
-        unit=value.get("unit"),
-        status_duration=value.get("status_duration"),
-        status_start_time=value.get("status_start_time"),
-      )
+      fields[key] = JsonSensorDataSubEntry.fromdict(value)
     return cls(**fields)
   def to_context(self, origin: SensorReadingType) -> SensorReadingsContext:
     ctx: SensorReadingsContext
     timestamp = self.timestamp.value
+    readings_entries = asdict(self)
     readings: list[SensorReading] = []
-    if self.battery:
-      readings.append(SensorReading(sensor=SensorType.BATTERY,
-                                    value=self.battery.value,
-                                    status=self.battery.status or SensorReadingStatus.NORMAL,
-                                    unit=self.battery.unit or "%",
-                                    ))
-    if self.temperature:
-      readings.append(SensorReading(sensor=SensorType.TEMPERATURE,
-                                    value=self.temperature.value,
-                                    status=self.temperature.status or SensorReadingStatus.NORMAL,
-                                    unit=self.temperature.unit or "°C",
-                                    ))
-    if self.humidity:
-      readings.append(SensorReading(sensor=SensorType.HUMIDITY,
-                                    value=self.humidity.value,
-                                    status=self.humidity.status or SensorReadingStatus.NORMAL,
-                                    unit=self.humidity.unit or "%",
-                                    ))
-    if self.pm1:
-      readings.append(SensorReading(sensor=SensorType.PM1,
-                                    value=self.pm1.value,
-                                    status=self.pm1.status or SensorReadingStatus.NORMAL,
-                                    unit=self.pm1.unit or "µg/m³",
-                                    ))
-    if self.pm25:
-      readings.append(SensorReading(sensor=SensorType.PM25,
-                                    value=self.pm25.value,
-                                    status=self.pm25.status or SensorReadingStatus.NORMAL,
-                                    unit=self.pm25.unit or "µg/m³",
-                                    ))
-    if self.pm10:
-      readings.append(SensorReading(sensor=SensorType.PM10,
-                                    value=self.pm10.value,
-                                    status=self.pm10.status or SensorReadingStatus.NORMAL,
-                                    unit=self.pm10.unit or "µg/m³",
-                                    ))
-    if self.co2:
-      readings.append(SensorReading(sensor=SensorType.CO2,
-                                    value=self.co2.value,
-                                    status=self.co2.status or SensorReadingStatus.NORMAL,
-                                    unit=self.co2.unit or "ppm",
-                                    ))
+    for sensor_data_key, reading in readings_entries.items():
+      try:
+        sensor_type = JsonSensorDataKeys(sensor_data_key)
+      except Exception:
+        continue
+      if sensor_type is not None and reading is not None:
+        sd: JsonSensorDataSubEntry = JsonSensorDataSubEntry.fromdict(reading)
+        unit = sd.unit
+        if unit is None or unit == str(None):
+          unit = sensor_type.default_unit
+        readings.append(SensorReading(sensor=sensor_type.associated_sensor,
+                                      value=sd.value,
+                                      unit=unit,
+                                      status=sd.status or SensorReadingStatus.NORMAL,
+                                      level=sd.level,
+                                      status_duration=sd.status_duration,
+                                      status_start_time=sd.status_start_time
+                                     ))
     ctx = SensorReadingsContext(
       origin=origin,
       timestamp=int(timestamp),
       readings=readings
     )
     return ctx
-    # FIXME: implement other sensors when needed
+
   def dump(self) -> str:
     msg = "JsonSensorData:"
     for key, value in asdict(self).items():
@@ -293,7 +287,7 @@ class JsonSensorData:
     return msg
     
 
-@dataclass(init=False)
+@dataclass
 class JsonWiFiInfo():
   """WiFi information structure.
   
@@ -303,20 +297,27 @@ class JsonWiFiInfo():
   rssi: int
   channel: int
   bssid: str
-  def __init__(self, csv: str) -> None:
+  @classmethod
+  def qp_json_decode(cls, csv: str) -> JsonWiFiInfo:
     fields = csv.split(",")
+    ssid: str
+    rssi: int
+    channel: int
+    bssid: str
     if len(fields) != 4:
       raise ValueError("Invalid WiFi info format")
-    self.ssid = fields[0]
+    ssid = fields[0]
     try:
-      self.rssi = int(fields[1])
+      rssi = int(fields[1])
     except ValueError:
       raise ValueError("Invalid RSSI value in WiFi info")
     try:
-      self.channel = int(fields[2])
+      channel = int(fields[2])
     except ValueError:
       raise ValueError("Invalid channel value in WiFi info")
-    self.bssid = fields[3]
+    bssid = fields[3]
+    return cls(ssid=ssid, rssi=rssi, channel=channel, bssid=bssid)
+    
   def qp_json_encode(self) -> str:
     """encode to format used in JSON protocol messages (omit None fields)"""
     return f"{self.ssid},{self.rssi},{self.channel},{self.bssid}"
@@ -574,6 +575,31 @@ class JsonFieldFormats(Enum):
   ]
   ```
   """
+
+class JsonSensorDataKeys(StrEnum):
+  """JSON protocol sensor data keys with associated sensor types and default units.
+  
+  Default units are from SPEC in section 2.2.1 "Device Sensor Data Format", usually omitted from payloads.
+  """
+  # FIXME: unit should probably be Enum as well
+  BATTERY = ("battery", SensorType.BATTERY, "%")
+  TEMPERATURE = ("temperature", SensorType.TEMPERATURE, "°C")
+  HUMIDITY = ("humidity", SensorType.HUMIDITY, "%")
+  PM1 = ("pm1", SensorType.PM1, "µg/m³")
+  PM25 = ("pm25", SensorType.PM25, "µg/m³")
+  PM10 = ("pm10", SensorType.PM10, "µg/m³")
+  CO2 = ("co2", SensorType.CO2, "ppm")
+  TVOC = ("tvoc", SensorType.TVOC, "ppb")
+  RADON = ("radon", SensorType.RADON, "index")
+
+  associated_sensor: SensorType
+  default_unit: str
+  def __new__(cls, value, associated_sensor, default_unit: str) -> JsonSensorDataKeys:
+    obj = str.__new__(cls, value)
+    obj._value_ = value
+    obj.associated_sensor = associated_sensor
+    obj.default_unit = default_unit
+    return obj 
 
 class JsonKey(StrEnum):
   """JSON protocol message keys.

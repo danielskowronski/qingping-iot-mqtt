@@ -6,6 +6,7 @@
 - [.] 1b - CLI
 - [.] 2 - MQTT connector and simple DB logging and VictoriaMetrics
 - [.] 3 - JSON protocol
+- [ ] 4 - device model
 - [ ] 5 - HomeAssistant
 
 ## phase 1 - HEX
@@ -31,3 +32,8 @@
 - [ ] config - container, decoding RW, encoding W
 - [ ] command - container, handle generic and re-provision (MQTT, Wi-Fi), encoding W
 - [ ] reasonable CLI to handle all of that
+
+## phase 4 - device model
+
+- [x] basic DeviceModel for config
+- [ ] move DeviceModel to DeviceModelConfig and implement DeviceModel itself with proper link to protocol and abstract methods to get data
