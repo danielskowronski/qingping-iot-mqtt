@@ -8,6 +8,7 @@ from dataclasses import dataclass, field
 from enum import StrEnum, Enum, auto
 
 class SensorType(StrEnum):
+  TIMESTAMP = auto()
   BATTERY = auto()
   TEMPERATURE = auto()
   TEMPERATURE_AUX = auto()

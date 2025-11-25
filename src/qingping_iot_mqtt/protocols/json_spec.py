@@ -14,6 +14,7 @@ from datetime import datetime, timedelta, time, timezone
 
 from enum import Enum, IntEnum, StrEnum
 from typing import Optional
+import typing
 
 from .base import (
   SensorReading,
@@ -26,8 +27,20 @@ from .base import (
 import logging
 logger = logging.getLogger(__name__)
 
+
+class JsonField():
+  """Abstract base class for JSON protocol field value."""
+  value: typing.Any
+  def qp_json_encode(self) -> object:
+    """encode to format used in JSON protocol messages"""
+    raise NotImplementedError("Not implemented yet")
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonField:
+    """decode from format used in JSON protocol messages"""
+    raise NotImplementedError("Not implemented yet")
+
 @dataclass(init=False)
-class JsonDurationSeconds:
+class JsonDurationSeconds(JsonField):
   seconds: int
   duration: timedelta
   def __init__(self, seconds: int) -> None:
@@ -37,6 +50,11 @@ class JsonDurationSeconds:
   def from_timedelta(duration: timedelta) -> JsonDurationSeconds:
     seconds = int(duration.total_seconds())
     return JsonDurationSeconds(seconds)
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonDurationSeconds:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonDurationSeconds")
+    return JsonDurationSeconds(data)
   def qp_json_encode(self) -> int:
     """encode to format used in JSON protocol messages"""
     return self.seconds
@@ -61,7 +79,7 @@ class JsonTime:
     return self.minutes_from_midnight
 
 @dataclass(init=False)
-class JsonTimestamp:
+class JsonTimestamp(JsonField):
   timestamp: int
   dt: datetime
   def __init__(self, timestamp: int) -> None:
@@ -74,6 +92,11 @@ class JsonTimestamp:
   def qp_json_encode(self) -> int:
     """encode to format used in JSON protocol messages"""
     return self.timestamp
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonTimestamp:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonTimestamp")
+    return JsonTimestamp(data)
 
 
 class JsonResult(IntEnum):
@@ -92,7 +115,21 @@ class JsonResult(IntEnum):
   CONNECT_EXCEPTION = -8
   DEVICE_OFFLINE = -9
   SPARROW_UNBINDING = -10
-  
+class JsonFieldResult(JsonField):
+  result: JsonResult
+  def __init__(self, result: JsonResult) -> None:
+    self.result = result
+  def qp_json_encode(self) -> int:
+    return self.result.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldResult:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonFieldResult")
+    try:
+      result = JsonResult(data)
+    except ValueError:
+      raise ValueError("Invalid result value for JsonFieldResult")
+    return JsonFieldResult(result)
 
 class JsonCommand(StrEnum):
   """JSON protocol command identifiers. Some of them are bi-directional.
@@ -144,6 +181,24 @@ class JsonCommand(StrEnum):
   ALARM = "40"
   """Alarms for alarm clocks. This is not mentioned in table."""
 
+class JsonCommandContainer(JsonField):
+  command: JsonCommand
+  value: JsonCommand
+  def __init__(self, command: JsonCommand) -> None:
+    self.command = command
+    self.value = command
+  def qp_json_encode(self) -> str:
+    return self.command.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonCommandContainer:
+    if not isinstance(data, str):
+      raise ValueError("Invalid data type for JsonCommandContainer")
+    try:
+      command = JsonCommand(data)
+    except ValueError:
+      raise ValueError("Invalid command value for JsonCommandContainer")
+    return JsonCommandContainer(command)
+
 @dataclass
 class JsonDeviceNamed:
   mac: str
@@ -152,7 +207,7 @@ class JsonDeviceNamed:
     """encode to format used in JSON protocol messages"""
     return asdict(self)
 @dataclass
-class JsonMqttConfig:
+class JsonMqttConfig(JsonField):
   host: str
   port: int
   usrname: str
@@ -164,12 +219,52 @@ class JsonMqttConfig:
   def qp_json_encode(self) -> dict[str, object]:
     """encode to format used in JSON protocol messages"""
     return asdict(self)
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonMqttConfig:
+    if not isinstance(data, dict):
+      raise ValueError("Invalid data type for JsonMqttConfig")
+    try:
+      host = str(data["host"])
+      port = int(data["port"])
+      usrname = str(data["usrname"])
+      password = str(data["password"])
+      clientid = str(data["clientid"])
+      subscribe_topic = str(data["subscribe_topic"])
+      publish_topic = str(data["publish_topic"])
+    except KeyError as e:
+      raise ValueError(f"Missing key in JsonMqttConfig: {e}")
+    except (TypeError, ValueError) as e:
+      raise ValueError(f"Invalid value type in JsonMqttConfig: {e}")
+    return JsonMqttConfig(
+      host=host,
+      port=port,
+      usrname=usrname,
+      password=password,
+      clientid=clientid,
+      subscribe_topic=subscribe_topic,
+      publish_topic=publish_topic
+    )
 @dataclass
-class JsonWifiConfig:
+class JsonWifiConfig(JsonField):
   SSID: str
   PASSWORD: str
   def qp_json_encode(self) -> dict[str, str]:
     return asdict(self)
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonWifiConfig:
+    if not isinstance(data, dict):
+      raise ValueError("Invalid data type for JsonWifiConfig")
+    try:
+      ssid = str(data["SSID"])
+      password = str(data["PASSWORD"])
+    except KeyError as e:
+      raise ValueError(f"Missing key in JsonWifiConfig: {e}")
+    except (TypeError, ValueError) as e:
+      raise ValueError(f"Invalid value type in JsonWifiConfig: {e}")
+    return JsonWifiConfig(
+      SSID=ssid,
+      PASSWORD=password
+    )
 
 @dataclass
 class JsonSensorDataSubEntry:
@@ -187,7 +282,7 @@ class JsonSensorDataSubEntry:
   status_start_time: Optional[int] = None
   
   @classmethod
-  def fromdict(cls, data: dict[str, object]) -> JsonSensorDataSubEntry:
+  def qp_json_decode(cls, data: dict[str, object], sensor: JsonSensorDataKeys) -> JsonSensorDataSubEntry:
     value = data.get("value")
     if value is None:
       raise ValueError("Missing 'value' key in JsonSensorDataSubEntry")
@@ -207,7 +302,7 @@ class JsonSensorDataSubEntry:
       value=value,
       status=SensorReadingStatus(data.get("status")) if "status" in data else SensorReadingStatus.NORMAL,
       level=level,
-      unit=str(data.get("unit")),
+      unit=str(data.get("unit")) if "unit" in data else sensor.default_unit,
       status_duration=status_duration,
       status_start_time=status_start_time
     )
@@ -241,13 +336,13 @@ class JsonSensorData:
     return data
   
   @classmethod
-  def fromdict(cls, data: dict[str, object]) -> JsonSensorData:
+  def qp_json_decode(cls, data: dict[str, object]) -> JsonSensorData:
     """construct JsonSensorData from dictionary (e.g. parsed from JSON)"""
     fields = {}
     for key, value in data.items():
       if not isinstance(value, dict):
         raise ValueError(f"Invalid value for JsonSensorData field {key}: expected dict, got {type(value)}")
-      fields[key] = JsonSensorDataSubEntry.fromdict(value)
+      fields[key] = JsonSensorDataSubEntry.qp_json_decode(value, JsonSensorDataKeys(key))
     return cls(**fields)
   def to_context(self, origin: SensorReadingType) -> SensorReadingsContext:
     ctx: SensorReadingsContext
@@ -260,7 +355,7 @@ class JsonSensorData:
       except Exception:
         continue
       if sensor_type is not None and reading is not None:
-        sd: JsonSensorDataSubEntry = JsonSensorDataSubEntry.fromdict(reading)
+        sd: JsonSensorDataSubEntry = JsonSensorDataSubEntry.qp_json_decode(reading, JsonSensorDataKeys(sensor_data_key))
         unit = sd.unit
         if unit is None or unit == str(None):
           unit = sensor_type.default_unit
@@ -288,7 +383,7 @@ class JsonSensorData:
     
 
 @dataclass
-class JsonWiFiInfo():
+class JsonWiFiInfo(JsonField):
   """WiFi information structure.
   
   JSON Protocol spec: section 3.13 "Heartbeat Package"
@@ -298,8 +393,10 @@ class JsonWiFiInfo():
   channel: int
   bssid: str
   @classmethod
-  def qp_json_decode(cls, csv: str) -> JsonWiFiInfo:
-    fields = csv.split(",")
+  def qp_json_decode(cls, data) -> JsonWiFiInfo:
+    if not isinstance(data, str):
+      raise ValueError("Invalid data type for JsonWiFiInfo")
+    fields = data.split(",")
     ssid: str
     rssi: int
     channel: int
@@ -347,7 +444,7 @@ class JsonLedThresholds:
       self.thresholds.append(value)
 
 @dataclass(init=False)
-class JsonSettings:
+class JsonSettings(JsonField):
   """JSON protocol device settings.
   
   JSON Protocol spec: section 2.2.3 Device Setting Format Specification
@@ -474,6 +571,16 @@ class JsonSettings:
     """encode to format used in JSON protocol messages (omit None fields)"""
     data = {k: v for k, v in asdict(self).items() if v is not None}
     return data
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonSettings:
+    if not isinstance(data, dict):
+      raise ValueError("Invalid data type for JsonSettings")
+    obj = JsonSettings.__new__(JsonSettings)
+    obj.raw_settings = data
+    for key, value in data.items():
+      if hasattr(obj, key):
+        setattr(obj, key, value)
+    return obj
 
 class JsonBindingStatus(IntEnum):
   """JSON protocol binding status codes.
@@ -482,6 +589,21 @@ class JsonBindingStatus(IntEnum):
   """
   BINDING = 1
   UNBINDING = 2
+class JsonFieldBindingStatus(JsonField):
+  status: JsonBindingStatus
+  def __init__(self, status: JsonBindingStatus) -> None:
+    self.status = status
+  def qp_json_encode(self) -> int:
+    return self.status.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldBindingStatus:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonFieldBindingStatus")
+    try:
+      status = JsonBindingStatus(data)
+    except ValueError:
+      raise ValueError("Invalid binding status value for JsonFieldBindingStatus")
+    return JsonFieldBindingStatus(status)
 class JsonOtaType(IntEnum):
   """JSON protocol OTA update types.
   
@@ -489,7 +611,21 @@ class JsonOtaType(IntEnum):
   """
   WIFI = 0
   MCU = 1
-
+class JsonFieldOtaType(JsonField):
+  ota_type: JsonOtaType
+  def __init__(self, ota_type: JsonOtaType) -> None:
+    self.ota_type = ota_type
+  def qp_json_encode(self) -> int:
+    return self.ota_type.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldOtaType:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonFieldOtaType")
+    try:
+      ota_type = JsonOtaType(data)
+    except ValueError:
+      raise ValueError("Invalid OTA type value for JsonFieldOtaType")
+    return JsonFieldOtaType(ota_type)
 class JsonAction(StrEnum):
   """JSON protocol action strings. This may be used for different actions.
   
@@ -497,31 +633,151 @@ class JsonAction(StrEnum):
   """
   SYNC = "alarmSync"
   QUERY = "alarmQuery"
+class JsonFieldAction(JsonField):
+  action: JsonAction
+  def __init__(self, action: JsonAction) -> None:
+    self.action = action
+  def qp_json_encode(self) -> str:
+    return self.action.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldAction:
+    if not isinstance(data, str):
+      raise ValueError("Invalid data type for JsonFieldAction")
+    try:
+      action = JsonAction(data)
+    except ValueError:
+      raise ValueError("Invalid action value for JsonFieldAction")
+    return JsonFieldAction(action)
 
-class JsonFieldFormats(Enum):
+class JsonFieldInt(JsonField):
+  value: int
+  def __init__(self, value: int) -> None:
+    self.value = value
+  def qp_json_encode(self) -> int:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldInt:
+    if not isinstance(data, int):
+      raise ValueError("Invalid data type for JsonFieldInt")
+    return JsonFieldInt(data)
+class JsonFieldListOfInts(JsonField):
+  value: list[int]
+  def __init__(self, value: list[int]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> list[int]:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldListOfInts:
+    if not isinstance(data, list) or not all(isinstance(i, int) for i in data):
+      raise ValueError("Invalid data type for JsonFieldListOfInts")
+    return JsonFieldListOfInts(data)
+
+class JsonFieldString(JsonField):
+  value: str
+  def __init__(self, value: str) -> None:
+    self.value = value
+  def qp_json_encode(self) -> str:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldString:
+    if not isinstance(data, str):
+      raise ValueError("Invalid data type for JsonFieldString")
+    return JsonFieldString(data)
+class JsonFieldListOfStrings(JsonField):
+  value: list[str]
+  def __init__(self, value: list[str]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> list[str]:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldListOfStrings:
+    if not isinstance(data, list) or not all(isinstance(i, str) for i in data):
+      raise ValueError("Invalid data type for JsonFieldListOfStrings")
+    return JsonFieldListOfStrings(data)
+class JsonFieldListOfNamedDevices(JsonField):
+  value: list[JsonDeviceNamed]
+  def __init__(self, value: list[JsonDeviceNamed]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> list[dict[str, str]]:
+    return [d.qp_json_encode() for d in self.value]
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldListOfNamedDevices:
+    if not isinstance(data, list):
+      raise ValueError("Invalid data type for JsonFieldListOfNamedDevices")
+    devices = []
+    for item in data:
+      if not isinstance(item, dict):
+        raise ValueError("Invalid item type in JsonFieldListOfNamedDevices: expected dict")
+      devices.append(JsonDeviceNamed(
+        mac=item.get("mac", ""),
+        name=item.get("name", "")
+      ))
+    return JsonFieldListOfNamedDevices(devices)
+
+class JsonFieldListOfSensorData(JsonField):
+  value: list[JsonSensorData]
+  def __init__(self, value: list[JsonSensorData]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> list[dict[str, object]]:
+    return [d.qp_json_encode() for d in self.value]
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldListOfSensorData:
+    if not isinstance(data, list):
+      raise ValueError("Invalid data type for JsonFieldListOfSensorData")
+    sensor_data_list = []
+    for item in data:
+      if not isinstance(item, dict):
+        raise ValueError("Invalid item type in JsonFieldListOfSensorData: expected dict")
+      sensor_data_list.append(JsonSensorData.qp_json_decode(item))
+    return JsonFieldListOfSensorData(sensor_data_list)
+
+class JsonFieldDict(JsonField):
+  value: dict[str, object]
+  def __init__(self, value: dict[str, object]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> dict[str, object]:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldDict:
+    if not isinstance(data, dict):
+      raise ValueError("Invalid data type for JsonFieldDict")
+    return JsonFieldDict(data)
+class JsonFieldListOfDicts(JsonField):
+  value: list[dict[str, object]]
+  def __init__(self, value: list[dict[str, object]]) -> None:
+    self.value = value
+  def qp_json_encode(self) -> list[dict[str, object]]:
+    return self.value
+  @classmethod
+  def qp_json_decode(cls, data: object) -> JsonFieldListOfDicts:
+    if not isinstance(data, list) or not all(isinstance(i, dict) for i in data):
+      raise ValueError("Invalid data type for JsonFieldListOfDicts")
+    return JsonFieldListOfDicts(data)
+
+class JsonFieldFormats(StrEnum):
   """JSON protocol message field formats.
   
   JSON Protocol spec: section 2.2 Json Formation Specification and following
   """
-  INT = int
-  LIST_OF_INTS = list[int]
-  TYPE_FIELD = JsonCommand
-  STRING = str
-  DEVICE_LIST = list[str]
+  INT = ("INT", JsonFieldInt)
+  LIST_OF_INTS = ("LIST_OF_INTS", JsonFieldListOfInts)
+  TYPE_FIELD = ("TYPE_FIELD", JsonCommandContainer)
+  STRING = ("STRING", JsonFieldString)
+  DEVICE_LIST = ("DEVICE_LIST", JsonFieldListOfStrings)
   """list of device MAC addresses as strings"""
-  DEVICE_NAMED_LIST = list[JsonDeviceNamed]
+  DEVICE_NAMED_LIST = ("DEVICE_NAMED_LIST", JsonFieldListOfNamedDevices)
   """list of named devices"""
-  MQTT_CONFIG = JsonMqttConfig
-  WIFI_CONFIG = JsonWifiConfig
-  WIFI_INFO = JsonWiFiInfo
-  SENSOR_DATA_LIST = list[JsonSensorData]
-  SETTINGS = JsonSettings
-  TIMESTAMP = JsonTimestamp
-  SECONDS = JsonDurationSeconds
-  RESULT = JsonResult
-  BINDING_STATUS = JsonBindingStatus
-  OTA_TYPE = JsonOtaType
-  BIND_PARAMS = dict[str, object] # TODO: implement better structure
+  MQTT_CONFIG = ("MQTT_CONFIG", JsonMqttConfig)
+  WIFI_CONFIG = ("WIFI_CONFIG", JsonWifiConfig)
+  WIFI_INFO = ("WIFI_INFO", JsonWiFiInfo)
+  SENSOR_DATA_LIST = ("SENSOR_DATA_LIST", JsonFieldListOfSensorData)
+  SETTINGS = ("SETTINGS", JsonSettings)
+  TIMESTAMP = ("TIMESTAMP", JsonTimestamp)
+  SECONDS = ("SECONDS", JsonDurationSeconds)
+  RESULT = ("RESULT", JsonFieldResult)
+  BINDING_STATUS = ("BINDING_STATUS", JsonFieldBindingStatus)
+  OTA_TYPE = ("OTA_TYPE", JsonFieldOtaType)
+  BIND_PARAMS = ("BIND_PARAMS", JsonFieldDict) # TODO: implement better structure
   """binding parameters as key-value dictionary
   
   official example:
@@ -532,7 +788,7 @@ class JsonFieldFormats(Enum):
   }
   ```
   """
-  SCENES = dict[str, object] # TODO: implement better structure
+  SCENES = ("SCENES", JsonFieldDict) # TODO: implement better structure
   """alert notification scenes as key-value dictionary
   
   official example (this is dict with single key 'scenes' mapping to list of scene dicts):
@@ -556,8 +812,8 @@ class JsonFieldFormats(Enum):
   }
   ```
   """
-  ACTION = JsonAction
-  ALARMS = list[dict[str, object]] # TODO: implement better structure
+  ACTION = ("ACTION", JsonFieldAction)
+  ALARMS = ("ALARMS", JsonFieldListOfDicts) # TODO: implement better structure
   """alarm clock alarms as list of alarm dicts
   
   official example:
@@ -575,6 +831,15 @@ class JsonFieldFormats(Enum):
   ]
   ```
   """
+  expected_type: JsonField
+  def __new__(cls, value, expected_type) -> JsonFieldFormats:
+    obj = str.__new__(cls, value)
+    obj._value_ = value
+    obj.expected_type = expected_type
+    return obj
+  def field_type(self) -> JsonField:
+    return self.expected_type
+
 
 class JsonSensorDataKeys(StrEnum):
   """JSON protocol sensor data keys with associated sensor types and default units.
@@ -582,6 +847,7 @@ class JsonSensorDataKeys(StrEnum):
   Default units are from SPEC in section 2.2.1 "Device Sensor Data Format", usually omitted from payloads.
   """
   # FIXME: unit should probably be Enum as well
+  TIMESTAMP = ("timestamp", SensorType.TIMESTAMP, "")
   BATTERY = ("battery", SensorType.BATTERY, "%")
   TEMPERATURE = ("temperature", SensorType.TEMPERATURE, "°C")
   HUMIDITY = ("humidity", SensorType.HUMIDITY, "%")

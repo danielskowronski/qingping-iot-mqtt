@@ -16,6 +16,7 @@ import json
 from dataclasses import dataclass
 from typing import Iterable, Mapping
 import logging
+import typing
 logger = logging.getLogger(__name__)
 
 from .base import (
@@ -88,19 +89,23 @@ class JsonFrame:
       decoded_value = None
       fmt = decoded_key.fmt
       try:
-        if isinstance(fmt, dataclass.__class__):
-          decoded_value = fmt.value.fromdict(value)
-        elif hasattr(fmt.value, "qp_json_decode") and callable(getattr(fmt.value, "qp_json_decode")):
-          decoded_value = fmt.value.qp_json_decode(value)  # pyright: ignore[reportAttributeAccessIssue]
-        else:
-          decoded_value = fmt.value(value)
+        decoded_field = fmt.field_type().qp_json_decode(value)
+        decoded_value = decoded_field.value if hasattr(decoded_field, "value") else decoded_field
       except Exception as e:
         logger.warning("Failed to decode JSON key %s: %s", key, e)
         self.unknown[key] = value
         continue
       self.known[decoded_key] = decoded_value
   @classmethod
-  def construct_frame(cls, cmd: JsonCommand, **fields: Mapping[JsonKey, JsonFieldFormats]) -> JsonFrame:
+  def construct_frame(cls, cmd: JsonCommand, fields: Mapping[JsonKey, typing.Any]) -> JsonFrame:
+    body = {}
+    body[JsonKey.TYPE.value] = cmd.value
+    for key_raw, value in fields.items():
+      key=JsonKey(key_raw)
+      if not isinstance(value, key.fmt.expected_type.__class__):
+        raise ValueError(f"Value for {key.name} must be of type {key.fmt.expected_type.__class__.__name__}")
+      if hasattr(value, "qp_json_encode") and callable(getattr(value, "qp_json_encode")):
+        body[key.value] = value.qp_json_encode()  # pyright: ignore[reportAttributeAccessIssue]
     raise NotImplementedError("Not implemented yet")
   def __str__(self) -> str:
     return json.dumps(self.decoded, indent=2)
@@ -117,7 +122,7 @@ class JsonProtocolMesssage(ProtocolMessage):
     self.direction = direction
     if self.frame.known.get(JsonKey.TYPE) is None:
       raise JsonFrameError("No type field in JSON frame")
-    self.frame_type = self.frame.known[JsonKey.TYPE]
+    self.frame_type = self.frame.known[JsonKey.TYPE].value
     if self.frame_type in [
       JsonCommand.BLE_CONNECTION_REQUEST,
       JsonCommand.BLE_DISCONNECTION_REQUEST,
@@ -201,10 +206,9 @@ class JsonSensorReadingMessage(SensorReadingsContainer):
       if not isinstance(sensor_data, list):
         raise JsonSensorReadingMessageError("Invalid sensor data in HISTORICAL_DATA_OR_SETTINGS message")
       for entry in sensor_data:
-        if not isinstance(entry, dict):
+        if not isinstance(entry, JsonSensorData):
           raise JsonSensorReadingMessageError("Invalid sensor data entry in HISTORICAL_DATA_OR_SETTINGS message")
-        entry_parsed = JsonSensorData.fromdict(entry)
-        self.readings.append(entry_parsed.to_context(origin=SensorReadingType.HISTORICAL))
+        self.readings.append(entry.to_context(origin=SensorReadingType.HISTORICAL))
     elif message.frame_type == JsonCommand.NOTIFICATION:
       # TODO: implement after encountering such message
       raise NotImplementedError("NOTIFICATION message parsing not implemented yet, got {message.frame}")
@@ -229,6 +233,26 @@ class JsonSensorReadingMessage(SensorReadingsContainer):
         raise JsonSensorReadingMessageError("Invalid WiFi info in HEARTBEAT message") from e
     else:
       raise JsonSensorReadingMessageError("JsonSensorReadingMessage can only be constructed from REALTIME_DATA, HISTORICAL_DATA_OR_SETTINGS, NOTIFICATION or HEARTBEAT message")
+
+class JsonRawCommand(DeviceCommand):
+  payload: bytes
+  def __init__(self, command: JsonCommand, parameters: Mapping[JsonKey, JsonFieldFormats]):
+    self.command = command
+    for key, value in parameters.items():
+      if not isinstance(value, key.fmt.__class__):
+        raise ValueError(f"Value for {key.name} must be of type {key.fmt.__class__.__name__}")
+    self.parameters=parameters
+  def encode(self) -> JsonFrame:
+    frame = JsonFrame.construct_frame(self.command, self.parameters)
+    return frame
+  def dump(self) -> str:
+    msg = f"JsonRawCommand(command={self.command}, payload_length={len(self.payload)})"
+    msg += f"\n  {self.payload.decode('utf-8')}"
+    return msg
+class JsonCommandRequestSettings(JsonRawCommand):
+  def __init__(self):
+    super().__init__(command=JsonCommand.SETTINGS_REPORT, parameters={})
+
 
 class JsonProtocol(Protocol):#
   name = ProtocolName.JSON.name

@@ -13,6 +13,8 @@ from qingping_iot_mqtt.cli.vm import initialize_vm
 
 import coloredlogs
 import logging
+
+from qingping_iot_mqtt.protocols.json import JsonProtocol
 logger = logging.getLogger(__name__)
 
 
@@ -45,11 +47,19 @@ def _decode_hex_payload(raw: bytes, direction: ProtocolMessageDirection):
     click.echo("Detected JSON protocol frame. Use appropriate tool to decode JSON frames.")
     return
   protocol = HexProtocol()
+  click.echo("HEX protocol detected.")
   message = protocol.decode_message(raw, direction)
   click.echo(message.dump())
   if message.category == ProtocolMessageCategory.READINGS:
     click.echo(HexSensorReadingMessage(message).dump())
-
+def _decode_json_payload(payload: str, direction: ProtocolMessageDirection):
+  if not payload.startswith('{') or not payload.endswith('}'):
+    click.echo("Detected non-JSON protocol frame. Use appropriate tool to decode HEX frames.")
+    return
+  protocol = JsonProtocol()
+  click.echo("JSON protocol detected.")
+  message = protocol.decode_message(payload.encode('utf-8'), direction)
+  click.echo(message.dump())
 
 @click.group(context_settings={"help_option_names": ["-h", "--help"]}, invoke_without_command=True)
 @click.option("--cfg", default="~/.config/qingping/qingping-mqtt.yaml", type=click.Path(dir_okay=False), help="Path to configuration file.", show_default=True)
@@ -102,21 +112,27 @@ def manual_group(ctx: click.Context, proto: str, to_device: bool, from_device: b
   ctx.ensure_object(dict)
   ctx.obj["manual"] = {"proto": proto, "direction": direction}
 
-
 @manual_group.command("decode")
-@click.option("--payload", "payload_hex", required=True, help="Raw frame as hex string (spaces allowed).")
+@click.option("--payload", "payload", required=True, help="Raw frame as hex string (spaces allowed) or as quoted string.")
 @click.pass_context
-def manual_decode(ctx: click.Context, payload_hex: str):
+def manual_decode(ctx: click.Context, payload: str):
   """Decode payload coming from a protocol frame."""
   settings = ctx.obj.get("manual", {})
   proto = settings.get("proto", "auto")
   direction = _resolve_direction(settings.get("direction"), ProtocolMessageDirection.DEVICE_TO_SERVER)
-  _ensure_hex_proto(proto)
-  raw = _parse_hex_string("payload", payload_hex)
-  click.echo("Protocol: HEX")
   click.echo(f"Direction: {direction.name}")
-  _decode_hex_payload(raw, direction)
-
+  if proto == "auto":
+    if payload.startswith('{') and payload.endswith('}'):
+      proto = "json"
+    else:
+      proto = "hex"
+  if proto == "json":
+    _decode_json_payload(payload, direction)
+    return
+  if proto == "hex":
+    raw = _parse_hex_string("payload", payload)
+    _decode_hex_payload(raw, direction)
+    return
 
 @manual_group.command("encode")
 @click.option("--raw-cmd", "raw_cmd_hex", required=True, help="HEX command byte (e.g. 31).")
