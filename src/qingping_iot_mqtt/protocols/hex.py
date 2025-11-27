@@ -423,9 +423,9 @@ class HexRawCommand(DeviceCommand):
   def __init__(self, command: int, parameters: Mapping[str, bytes]):
     self.command = command
     self.payload = parameters.get('payload', b'')
-  def encode(self) -> HexFrame:
+  def encode(self) -> bytes:
     frame = HexFrame.construct_frame(cmd=self.command, payload=self.payload)
-    return frame
+    return frame.frame
   def dump(self) -> str:
     msg = f"HexRawCommand(command=0x{self.command:02X}, payload_length={len(self.payload)})"
     msg += f"\n  {self.payload.hex()}"
