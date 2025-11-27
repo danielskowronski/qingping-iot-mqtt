@@ -35,7 +35,8 @@ dependencies = [
   "paho-mqtt~=2.1.0",
   "coloredlogs~=15.0.1",
   "peewee~=3.18.3",
-  "requests~=2.32.5"
+  "requests~=2.32.5",
+  "asyncio_mqtt~=0.16.2"
 ]
 
 [project.urls]

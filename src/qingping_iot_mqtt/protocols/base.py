@@ -282,6 +282,9 @@ class DeviceCommand:
   """Container for device command information."""
   command: Any
   parameters: Mapping = field(default_factory=dict)
+  def encode(self) -> bytes:
+    """Encode command into raw bytes to be sent to device."""
+    return b""
 
 @dataclass(frozen=True)
 class MQTTConfiguration:
@@ -384,6 +387,9 @@ class ProtocolMessage:
     return f"ProtocolMessage(direction={self.direction.name}, category={self.category.name}, body_len={len(self.body)} bytes>"
   def needs_ack(self) -> bool:
     """Check if this message requires an acknowledgment."""
+    return False
+  def is_this_response(self, response: ProtocolMessage) -> bool:
+    """Check if given ProtocolMessage is a response to this intsance."""
     return False
 
 

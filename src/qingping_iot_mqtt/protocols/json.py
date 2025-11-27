@@ -181,6 +181,41 @@ class JsonProtocolMesssage(ProtocolMessage):
   def needs_ack(self) -> bool:
     """Check if this message requires an acknowledgment."""
     return self.frame.known.get(JsonKey.NEED_ACK, False)
+  def is_this_response(self, response: ProtocolMessage) -> bool:
+    """Check if given ProtocolMessage is a response to this intsance."""
+    if not isinstance(response, JsonProtocolMesssage):
+      return False
+    
+    # cannot be response in same direction
+    if self.direction == response.direction:
+      return False
+    
+    # if both have ID, they must match
+    if self.frame.known.get(JsonKey.ID) is not None and  response.frame.known.get(JsonKey.ID) is not None:
+      if self.frame.known.get(JsonKey.ID) != response.frame.known.get(JsonKey.ID):
+        return False
+    
+    if self.frame_type == JsonCommand.DEVICE_LIST_REQUEST and response.frame_type == JsonCommand.DEVICE_LIST_RESPONSE:
+      return True
+    if self.frame_type == JsonCommand.DEVICE_LIST_NAMED_REQUEST and response.frame_type == JsonCommand.DEVICE_LIST_NAMED_RESPONSE:
+      return True
+
+    if self.frame_type in [JsonCommand.REALTIME_DATA, JsonCommand.HISTORICAL_DATA_OR_SETTINGS] and response.frame_type == JsonCommand.DATA_ACK:
+      return True
+    
+    if self.direction == ProtocolMessageDirection.SERVER_TO_DEVICE \
+      and self.frame_type == JsonCommand.HISTORICAL_DATA_OR_SETTINGS \
+      and response.frame_type == JsonCommand.SETTINGS_REPORT:
+        return True
+    
+    if self.frame_type == JsonCommand.OTA_COMMAND and response.frame_type == JsonCommand.OTA_RESPONSE:
+      return True
+    
+    # TODO: implement temporary rapid reporting flow
+    # TODO: implement notification setting flow
+    # TODO: implement alarm setting flow
+    
+    return False
 class JsonSensorReadingMessageError(Exception):
   """Exception raised on JSON sensor reading message parsing errors."""
   pass
@@ -242,9 +277,9 @@ class JsonRawCommand(DeviceCommand):
       if not isinstance(value, key.fmt.__class__):
         raise ValueError(f"Value for {key.name} must be of type {key.fmt.__class__.__name__}")
     self.parameters=parameters
-  def encode(self) -> JsonFrame:
+  def encode(self) -> bytes:
     frame = JsonFrame.construct_frame(self.command, self.parameters)
-    return frame
+    return frame.frame
   def dump(self) -> str:
     msg = f"JsonRawCommand(command={self.command}, payload_length={len(self.payload)})"
     msg += f"\n  {self.payload.decode('utf-8')}"

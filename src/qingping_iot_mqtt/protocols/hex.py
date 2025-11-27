@@ -200,6 +200,19 @@ class HexProtocolMesssage(ProtocolMessage):
     for entry in self.frame.payload.entries:
       msg += f"\n  - {entry.dump()}"
     return msg
+  def is_this_response(self, response: ProtocolMessage) -> bool:
+    """Check if given ProtocolMessage is a response to this intsance."""
+    if not isinstance(response, HexProtocolMesssage):
+      return False
+    if self.direction == response.direction: # cannot be response in same direction
+      return False
+    
+    # logic section
+    if self.frame.cmd == HexCommand.CONFIGURATION_SENDING and response.frame.cmd == HexCommand.CONFIGURATION_REPORTING:
+      return True
+    # this is only known case for now
+    
+    return False
 
 class HexSensorReadingMessageError(Exception):
   """Exception raised on HEX sensor reading message parsing errors."""
